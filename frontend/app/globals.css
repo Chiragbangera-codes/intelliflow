@@ -1,0 +1,103 @@
+/*
+ * IntelliFlow AI — Global CSS
+ *
+ * Design tokens follow UI_UX_DESIGN_SPECIFICATION §5 (Color Palette) and §6 (Typography).
+ * Tailwind CSS v4 uses CSS-first configuration — design tokens are defined here
+ * as CSS custom properties rather than in a JavaScript config file.
+ *
+ * Fonts referenced:
+ *   --font-inter      → Body text (loaded in layout.tsx)
+ *   --font-poppins    → Headings (loaded on demand via next/font in heading components)
+ */
+
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design Tokens — Color Palette (UI_UX_DESIGN_SPECIFICATION §5)
+   --------------------------------------------------------------------------- */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+
+  /* Semantic */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
+
+  /* Layout */
+  --color-background: #f8fafc;
+  --color-card: #ffffff;
+  --color-sidebar: #0f172a;
+  --color-border: #e5e7eb;
+
+  /* Typography */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+
+  /* Spacing base unit: 8px */
+  --spacing-base: 8px;
+
+  /* Border radius (UI_UX_DESIGN_SPECIFICATION §9) */
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --radius-input: 8px;
+}
+
+/* Dark mode tokens (UI_UX_DESIGN_SPECIFICATION §29) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #0b1220;
+    --color-card: #111827;
+    --color-text-primary: #f9fafb;
+    --color-text-secondary: #9ca3af;
+    --color-border: #1f2937;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Base styles
+   --------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px; /* Body size per UI_UX_DESIGN_SPECIFICATION §6 */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Typography scale (UI_UX_DESIGN_SPECIFICATION §6)
+   --------------------------------------------------------------------------- */
+h1 { font-size: 2.25rem; }  /* 36px */
+h2 { font-size: 1.875rem; } /* 30px */
+h3 { font-size: 1.5rem; }   /* 24px */
+h4 { font-size: 1.25rem; }  /* 20px */
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text-primary);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}

@@ -1,0 +1,185 @@
+# =============================================================================
+# IntelliFlow AI — Docker Compose
+#
+# Starts all services with a single command: docker compose up --build
+#
+# Services:
+#   postgres  — PostgreSQL 16 database
+#   redis     — Redis cache & Celery broker
+#   backend   — FastAPI application
+#   worker    — Celery background worker (stub, Milestone 1)
+#   frontend  — Next.js 15 application
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: intelliflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-intelliflow}
+      POSTGRES_USER: ${POSTGRES_USER:-intelliflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_strong_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-intelliflow_user} -d ${POSTGRES_DB:-intelliflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # Redis (Cache + Celery Broker)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: intelliflow_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: intelliflow_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2:1b
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source for hot-reload in development
+      - ./backend:/app
+      # FAISS index shared with worker
+      - ./data/faiss:/app/data/faiss
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # Ollama — Local LLM server (Milestone 7, CPU-only)
+  # Model is NOT pulled automatically. Run manually:
+  #   docker compose exec ollama ollama pull llama3.2:1b
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama
+    container_name: intelliflow_ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=1
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: intelliflow_worker
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2:1b
+    volumes:
+      - ./backend:/app
+      # FAISS index is persisted here so it survives worker restarts
+      - ./data/faiss:/app/data/faiss
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # Next.js Frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: intelliflow_frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source for hot-reload; exclude node_modules
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - intelliflow_network
+
+# =============================================================================
+# Volumes — persistent data survives container restarts
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+# =============================================================================
+# Network — isolated bridge network for inter-service communication
+# =============================================================================
+networks:
+  intelliflow_network:
+    driver: bridge

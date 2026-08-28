@@ -1,0 +1,169 @@
+# =============================================================================
+# IntelliFlow AI — GitHub Actions CI Pipeline
+#
+# Triggers on every push and pull request to `main` and `develop`.
+#
+# Jobs:
+#   1. frontend-lint   — ESLint on the Next.js codebase
+#   2. backend-lint    — Ruff + mypy on the Python codebase
+#   3. backend-tests   — pytest with a real PostgreSQL service container
+#
+# Philosophy:
+#   - Jobs are independent and run in parallel where possible.
+#   - Lint failures block tests to fail fast and save CI minutes.
+#   - The PostgreSQL service container mirrors the docker-compose setup
+#     so tests run against a real database (not a mock).
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel in-progress runs on the same branch when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Minimal permissions — principle of least privilege
+permissions:
+  contents: read
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Job 1: Frontend Lint
+  # ---------------------------------------------------------------------------
+  frontend-lint:
+    name: Frontend Lint (ESLint)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript type check
+        run: npx tsc --noEmit
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Backend Lint
+  # ---------------------------------------------------------------------------
+  backend-lint:
+    name: Backend Lint (Ruff + mypy)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Ruff linter
+        run: ruff check app tests
+
+      - name: Run Ruff formatter check
+        run: ruff format --check app tests
+
+      - name: Run mypy type checker
+        run: mypy app
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Backend Tests
+  # ---------------------------------------------------------------------------
+  backend-tests:
+    name: Backend Tests (pytest)
+    runs-on: ubuntu-latest
+    # Tests depend on lint passing to avoid running against broken code
+    needs: backend-lint
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: intelliflow_test
+          POSTGRES_USER: intelliflow_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U intelliflow_user -d intelliflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      # Environment variables for the test run
+      APP_ENV: development
+      APP_DEBUG: "true"
+      DATABASE_URL: postgresql+asyncpg://intelliflow_user:test_password@localhost:5432/intelliflow_test
+      DATABASE_SYNC_URL: postgresql+psycopg2://intelliflow_user:test_password@localhost:5432/intelliflow_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      CORS_ORIGINS: http://localhost:3000
+      LOG_LEVEL: WARNING
+      # JWT — test-only secret key (not used in production)
+      JWT_SECRET_KEY: ci_test_secret_key_min_32_chars_not_production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest tests/ -v --tb=short

@@ -1,0 +1,3 @@
+# Migration versions are tracked by git.
+# Alembic generates migration files here automatically.
+# Never edit generated migration files — always create new ones.

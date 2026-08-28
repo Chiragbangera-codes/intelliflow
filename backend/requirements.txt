@@ -1,0 +1,51 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+email-validator==2.2.0
+python-multipart>=0.0.18
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+greenlet==3.1.1
+
+# Cache & Background Jobs
+redis==5.2.1
+celery==5.4.0
+
+# Authentication (Milestone 2)
+argon2-cffi==23.1.0
+python-jose[cryptography]==3.3.0
+
+# OCR & Document Extraction (Milestone 6)
+pypdf>=5.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+Pillow>=10.0.0
+pytesseract>=0.3.10
+pdf2image>=1.17.0
+
+# AI Assistant — RAG Pipeline (Milestone 7)
+sentence-transformers>=3.0.0
+faiss-cpu>=1.8.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+numpy>=1.26.0
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+httpx==0.28.1
+anyio==4.7.0
+aiosqlite==0.20.0
+
+# Code Quality (used by CI and local development)
+ruff==0.8.4
+black==24.10.0
+isort==5.13.2
+mypy==1.13.0
