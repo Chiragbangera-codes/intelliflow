@@ -10,11 +10,13 @@
  * Server state (API data) is managed by React Query — not Zustand.
  * Zustand is only for UI state and session data.
  *
- * Future stores (Milestone 2+):
+ * Stores:
  *   store/
  *     auth.store.ts          ← User session
- *     notification.store.ts  ← Notification list
- *     theme.store.ts         ← Theme preference
+ *     notification.store.ts  ← Notification list + unread count + polling
+ *     theme.store.ts         ← Theme preference (future)
  */
 
-export {};
+export { useAuthStore } from "./auth.store";
+export { useNotificationStore } from "./notification.store";
+

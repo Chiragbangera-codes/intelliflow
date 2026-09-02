@@ -48,6 +48,12 @@ class Report(Base):
         nullable=False,
         doc="Category/type of the report (e.g. 'revenue', 'department_analytics').",
     )
+    format: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+        default="csv",
+        doc="Output format: 'csv', 'xlsx', or 'pdf'.",
+    )
     file_path: Mapped[str | None] = mapped_column(
         String(2000),
         nullable=True,

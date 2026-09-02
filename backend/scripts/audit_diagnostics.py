@@ -14,6 +14,7 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, "/app")
 
 from sqlalchemy import func, select
+
 from app.core.database import AsyncSessionLocal
 from app.models.ai_embedding import AIEmbedding
 from app.models.document import Document

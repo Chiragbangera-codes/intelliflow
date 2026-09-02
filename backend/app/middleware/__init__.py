@@ -1,6 +1,14 @@
 """
-Middleware package.
-
-Middleware is registered in app/main.py.
-Individual middleware classes or factory functions are defined here.
+Middleware package for IntelliFlow AI.
 """
+
+from app.middleware.correlation import CorrelationIdMiddleware, get_current_request_id
+from app.middleware.rate_limit import RateLimiter
+from app.middleware.security_headers import SecurityHeadersMiddleware
+
+__all__ = [
+    "CorrelationIdMiddleware",
+    "RateLimiter",
+    "SecurityHeadersMiddleware",
+    "get_current_request_id",
+]

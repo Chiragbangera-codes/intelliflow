@@ -148,25 +148,17 @@ export interface UpdateEmployeeProfileRequest {
 }
 
 // ---------------------------------------------------------------------------
-// Document types
+// Document types (Milestone 11)
 // ---------------------------------------------------------------------------
 
-export type DocumentStatus = "pending" | "processing" | "processed" | "failed";
-export type OcrStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
+import type {
+  DocumentConfidentiality,
+  EnterpriseDocument,
+} from "./document";
 
-export interface Document {
-  id: string;
-  file_name: string;
-  storage_path: string;
-  file_type?: string | null;
-  file_size?: number | null;
-  owner_id: string;
-  status: DocumentStatus;
-  ocr_status: OcrStatus;
-  checksum?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export * from "./document";
+
+export type Document = EnterpriseDocument;
 
 export interface CreateDocumentRequest {
   file_name: string;
@@ -174,9 +166,27 @@ export interface CreateDocumentRequest {
   file_type?: string | null;
   file_size?: number | null;
   checksum?: string | null;
+  title?: string;
+  description?: string | null;
+  category?: string | null;
+  document_type?: string | null;
+  tags?: string[];
+  department_id?: string | null;
+  confidentiality?: DocumentConfidentiality;
+  retention_period_days?: number | null;
+  expires_at?: string | null;
 }
 
 export interface UpdateDocumentRequest {
+  title?: string;
+  description?: string | null;
+  category?: string | null;
+  document_type?: string | null;
+  tags?: string[];
+  department_id?: string | null;
+  confidentiality?: DocumentConfidentiality;
+  retention_period_days?: number | null;
+  expires_at?: string | null;
   file_name?: string | null;
   file_type?: string | null;
   checksum?: string | null;
@@ -185,18 +195,14 @@ export interface UpdateDocumentRequest {
 export type DocumentSortField =
   | "created_at"
   | "-created_at"
+  | "updated_at"
+  | "-updated_at"
   | "file_name"
   | "-file_name"
+  | "title"
+  | "-title"
   | "file_size"
   | "-file_size";
-
-export interface DocumentQueryParams {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  status?: DocumentStatus | "all";
-  sort?: DocumentSortField;
-}
 
 // ---------------------------------------------------------------------------
 // Dashboard types
@@ -343,5 +349,120 @@ export interface AIChatResponseData {
   sources: AISource[];
   /** Number of authorized chunks retrieved (0 for no-context fallback). */
   retrieved_chunks: number;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard types
+// ---------------------------------------------------------------------------
+
+export interface DashboardStats {
+  total_departments: number;
+  total_employees: number;
+  total_documents: number;
+  total_workflows: number;
+  pending_executions: number;
+}
+
+// ---------------------------------------------------------------------------
+// Workflow types (Milestone 8)
+// ---------------------------------------------------------------------------
+
+export type WorkflowActionType = "notify" | "send_email" | "archive_document" | "approve" | "delay";
+
+export type ExecutionStatusType = "pending" | "running" | "waiting_approval" | "completed" | "failed" | "rejected";
+
+export interface WorkflowStepCreate {
+  step_number: number;
+  action: WorkflowActionType;
+  configuration?: Record<string, unknown> | null;
+  timeout?: number | null;
+  retry_count?: number;
+}
+
+export interface WorkflowStep {
+  id: string;
+  workflow_id: string;
+  step_number: number;
+  action: WorkflowActionType;
+  configuration?: Record<string, unknown> | null;
+  timeout?: number | null;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  version: number;
+  created_by?: string | null;
+  creator_name?: string | null;
+  steps: WorkflowStep[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowCreateRequest {
+  name: string;
+  description?: string | null;
+  steps: WorkflowStepCreate[];
+}
+
+export interface WorkflowUpdateRequest {
+  name?: string | null;
+  description?: string | null;
+  is_active?: boolean | null;
+  steps?: WorkflowStepCreate[] | null;
+}
+
+export interface WorkflowRunRequest {
+  context?: Record<string, unknown> | null;
+}
+
+export interface WorkflowRunResponse {
+  execution_id: string;
+  status: string;
+}
+
+export interface WorkflowExecutionLogStep {
+  step_number: number;
+  action: string;
+  status: "running" | "completed" | "failed" | "requires_approval";
+  started_at?: number;
+  duration?: number;
+  result?: Record<string, unknown>;
+  error?: string;
+  retries?: number;
+}
+
+export interface WorkflowExecutionLogs {
+  steps?: WorkflowExecutionLogStep[];
+  resume_from_step?: number;
+  approval?: {
+    decision: "approve" | "reject";
+    approved_by: string;
+    approved_at: string;
+    comment?: string | null;
+  };
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflow_id: string;
+  triggered_by?: string | null;
+  status: ExecutionStatusType;
+  duration?: number | null;
+  logs?: WorkflowExecutionLogs | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApprovalActionRequest {
+  action: "approve" | "reject";
+  comment?: string | null;
 }
 

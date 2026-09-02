@@ -24,6 +24,7 @@ from app.models.user import User
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.employee_profile_repository import EmployeeProfileRepository
+from app.repositories.workflow_repository import WorkflowRepository
 from app.schemas.dashboard import DashboardStatsResponse
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class DashboardService:
         self._departments = DepartmentRepository(session)
         self._employees = EmployeeProfileRepository(session)
         self._documents = DocumentRepository(session)
+        self._workflows = WorkflowRepository(session)
 
     async def get_stats(self, *, actor: User) -> DashboardStatsResponse:
         """
@@ -56,21 +58,35 @@ class DashboardService:
         total_departments = await self._departments.count_active()
         total_employees = await self._employees.count_active()
 
-        if actor.role.name in _ADMIN_ROLES:
+        role_name = (
+            actor.role.name.lower()
+            if actor.role and hasattr(actor.role, "name") and actor.role.name
+            else str(getattr(actor, "role", "")).lower()
+        )
+        if role_name in _ADMIN_ROLES:
             total_documents = await self._documents.count_all_active()
         else:
             total_documents = await self._documents.count_by_owner(actor.id)
 
+        # Milestone 8 — workflow counts (two efficient COUNT queries)
+        total_workflows = await self._workflows.count_active_workflows()
+        pending_executions = await self._workflows.count_pending_executions()
+
         logger.debug(
-            "Dashboard stats fetched: user=%s depts=%d employees=%d docs=%d",
+            "Dashboard stats fetched: user=%s depts=%d employees=%d docs=%d "
+            "workflows=%d pending_exec=%d",
             actor.id,
             total_departments,
             total_employees,
             total_documents,
+            total_workflows,
+            pending_executions,
         )
 
         return DashboardStatsResponse(
             total_departments=total_departments,
             total_employees=total_employees,
             total_documents=total_documents,
+            total_workflows=total_workflows,
+            pending_executions=pending_executions,
         )

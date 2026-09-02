@@ -128,7 +128,11 @@ class SearchService:
                 detail="Query must not be blank or whitespace-only.",
             )
 
-        role_name = actor.role.name if hasattr(actor.role, "name") else str(actor.role)
+        role_name = (
+            actor.role.name.lower()
+            if actor.role and hasattr(actor.role, "name") and actor.role.name
+            else str(getattr(actor, "role", "employee")).lower()
+        )
         is_global = role_name in _GLOBAL_ACCESS_ROLES
 
         # Resolve the effective similarity threshold: an explicit per-request

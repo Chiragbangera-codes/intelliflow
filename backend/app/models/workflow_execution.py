@@ -31,9 +31,11 @@ class ExecutionStatus(str, enum.Enum):
 
     PENDING = "pending"
     RUNNING = "running"
+    WAITING_APPROVAL = "waiting_approval"  # Milestone 8: paused at approve step
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"  # Milestone 8: approval was rejected
 
 
 class WorkflowExecution(Base):

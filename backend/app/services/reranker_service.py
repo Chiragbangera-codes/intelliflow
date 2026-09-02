@@ -37,7 +37,10 @@ from __future__ import annotations
 import logging
 import threading
 
-from sentence_transformers import CrossEncoder
+try:
+    from sentence_transformers import CrossEncoder
+except ImportError:
+    CrossEncoder = None  # type: ignore[assignment, misc]
 
 from app.core.config import settings
 from app.schemas.search import SearchResult

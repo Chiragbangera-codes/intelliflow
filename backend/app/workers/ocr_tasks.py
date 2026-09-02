@@ -166,7 +166,15 @@ async def _async_process_document_ocr(
         return await _run(session)
 
 
-@celery_app.task(name="tasks.process_document_ocr", bind=True)
+@celery_app.task(
+    name="tasks.process_document_ocr",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=3,
+)
 def process_document_ocr(self: Any, document_id: str) -> dict[str, Any]:
     """
     Celery task entrypoint for document OCR and text extraction.

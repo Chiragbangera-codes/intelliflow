@@ -1,59 +1,140 @@
 """
-Document management API routes.
+Document management & intelligence API routes (Milestone 11).
 
-Provides endpoints for:
-  - POST   /api/v1/documents/upload          — multipart streaming file upload (Milestone 5)
-  - GET    /api/v1/documents/{id}/download   — streaming file download (Milestone 5)
-  - GET    /api/v1/documents                 — list with search, filter, sort, pagination
-  - GET    /api/v1/documents/{id}            — get metadata
-  - POST   /api/v1/documents                 — create metadata
-  - PATCH  /api/v1/documents/{id}            — update metadata
-  - DELETE /api/v1/documents/{id}            — soft-delete
+Endpoints:
+  Upload & Ingestion:
+    POST   /api/v1/documents/upload                  — multipart streaming file upload with version 1
+    POST   /api/v1/documents                         — create metadata record
 
-Security:
-  - owner_id is always stamped from the authenticated JWT session.
-  - Non-admin users can access only their own documents.
-  - status / ocr_status are server-controlled.
-  - Streaming uploads prevent RAM exhaustion; file paths are verified against traversal.
+  Bulk Operations (Must precede /{document_id}):
+    POST   /api/v1/documents/bulk/archive            — bulk archive
+    POST   /api/v1/documents/bulk/restore            — bulk restore
+    POST   /api/v1/documents/bulk/delete             — bulk soft-delete
+    POST   /api/v1/documents/bulk/tag                — bulk tag
+    POST   /api/v1/documents/bulk/share              — bulk share
+
+  Document Listings & Details:
+    GET    /api/v1/documents                         — list documents with advanced filters & search
+    GET    /api/v1/documents/{document_id}           — get document metadata
+    PATCH  /api/v1/documents/{document_id}           — update metadata
+    DELETE /api/v1/documents/{document_id}           — soft-delete document
+
+  Download & Preview:
+    GET    /api/v1/documents/{document_id}/download  — stream download current version
+    GET    /api/v1/documents/{document_id}/preview   — stream preview current version
+
+  Lifecycle Actions:
+    POST   /api/v1/documents/{document_id}/activate  — activate document
+    POST   /api/v1/documents/{document_id}/archive   — archive document
+    POST   /api/v1/documents/{document_id}/restore   — restore document
+    POST   /api/v1/documents/{document_id}/expire    — expire document
+
+  Version Management:
+    POST   /api/v1/documents/{document_id}/versions                       — upload new version
+    GET    /api/v1/documents/{document_id}/versions                       — list all versions
+    GET    /api/v1/documents/{document_id}/versions/{version_id}          — get version metadata
+    POST   /api/v1/documents/{document_id}/versions/{version_id}/restore  — restore version
+    GET    /api/v1/documents/{document_id}/versions/{version_id}/download — download version
+
+  Access Grants & Sharing:
+    POST   /api/v1/documents/{document_id}/shares                         — grant access to user
+    GET    /api/v1/documents/{document_id}/shares                         — list active grants
+    PATCH  /api/v1/documents/{document_id}/shares/{share_id}              — update grant
+    DELETE /api/v1/documents/{document_id}/shares/{share_id}              — revoke grant
+
+  Activity & Intelligence:
+    GET    /api/v1/documents/{document_id}/activity                       — activity timeline
+    POST   /api/v1/documents/{document_id}/ai/summary                     — AI summary
+    POST   /api/v1/documents/{document_id}/ai/chat                        — document-scoped AI chat
+
+  OCR & Extraction:
+    POST   /api/v1/documents/{document_id}/ocr                            — trigger OCR
+    GET    /api/v1/documents/{document_id}/text                           — get extracted text
 """
 
+from __future__ import annotations
+
 import uuid
+from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
-from app.models.document import DocumentStatus
+from app.middleware.rate_limit import RateLimiter
+from app.models.document import (
+    DocumentConfidentiality,
+    DocumentLifecycleStatus,
+    DocumentStatus,
+)
 from app.models.user import User
-from app.schemas.document import DocumentCreate, DocumentUpdate
+from app.schemas.document import (
+    BulkDocumentIdsRequest,
+    BulkOperationResponse,
+    BulkShareRequest,
+    BulkTagRequest,
+    DocumentActivityResponse,
+    DocumentAIChatRequest,
+    DocumentAIChatResponse,
+    DocumentAISummaryResponse,
+    DocumentCreate,
+    DocumentShareCreate,
+    DocumentShareUpdate,
+    DocumentUpdate,
+    PaginatedDocumentResponse,
+)
+from app.services.document_ai_service import DocumentAIService
 from app.services.document_service import DocumentService
 from app.services.ocr_service import OCRService
 
 router = APIRouter(
     prefix="/documents",
-    tags=["Documents"],
+    tags=["Documents & Intelligence"],
 )
 
 _VALID_SORT_FIELDS = frozenset(
-    {"created_at", "-created_at", "file_name", "-file_name", "file_size", "-file_size"}
+    {
+        "created_at",
+        "-created_at",
+        "updated_at",
+        "-updated_at",
+        "file_name",
+        "-file_name",
+        "title",
+        "-title",
+        "file_size",
+        "-file_size",
+    }
 )
 
 
 def _get_service(db: AsyncSession = Depends(get_db)) -> DocumentService:
-    """Provide a DocumentService instance with the injected DB session."""
     return DocumentService(db)
 
 
+def _get_ai_service(db: AsyncSession = Depends(get_db)) -> DocumentAIService:
+    return DocumentAIService(db)
+
+
 def _get_ocr_service(db: AsyncSession = Depends(get_db)) -> OCRService:
-    """Provide an OCRService instance with the injected DB session."""
     return OCRService(db)
 
 
 def _get_client_ip(request: Request) -> str | None:
-    """Extract the client IP for audit logging."""
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -61,39 +142,53 @@ def _get_client_ip(request: Request) -> str | None:
 
 
 # =============================================================================
-# POST /documents/upload — multipart file upload (Milestone 5)
+# 1. Upload Document (Multipart)
 # =============================================================================
 
 
 @router.post(
     "/upload",
     status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(
+            RateLimiter(
+                max_requests=settings.RATE_LIMIT_DOCUMENT_UPLOAD,
+                window_seconds=60,
+                group="doc_upload",
+            )
+        )
+    ],
     summary="Upload a document",
-    description=(
-        "Streams a multipart file to secure local storage, calculates its SHA-256 checksum, "
-        "validates format and size (max 100 MB), stamps owner_id from the authenticated user, "
-        "and logs the operation."
-    ),
-    responses={
-        201: {"description": "Document uploaded and metadata registered successfully."},
-        400: {"description": "Invalid file format or name."},
-        401: {"description": "Not authenticated."},
-        413: {"description": "File exceeds 100 MB size limit."},
-        500: {"description": "Storage or database failure."},
-    },
+    description="Streams multipart file to storage, creates Document record & Version 1, triggers OCR.",
 )
 async def upload_document(
     request: Request,
-    file: UploadFile = File(
-        ..., description="Document file to upload (PDF, DOCX, XLSX, PNG, JPG, JPEG)."
-    ),
+    file: UploadFile = File(..., description="Document file (PDF, DOCX, XLSX, PNG, JPG, JPEG)."),
+    title: str | None = Form(default=None),
+    description: str | None = Form(default=None),
+    category: str | None = Form(default=None),
+    document_type: str | None = Form(default=None),
+    tags: list[str] | None = Form(default=None),
+    department_id: uuid.UUID | None = Form(default=None),
+    confidentiality: DocumentConfidentiality = Form(default=DocumentConfidentiality.INTERNAL),
+    retention_period_days: int | None = Form(default=None),
+    expires_at: datetime | None = Form(default=None),
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
 ) -> dict[str, Any]:
-    """Upload a document with streaming storage and SHA-256 calculation."""
+    """Upload a document file with version 1 registration."""
     doc = await svc.upload_document(
         file=file,
         actor=current_user,
+        title=title,
+        description=description,
+        category=category,
+        document_type=document_type,
+        tags=tags,
+        department_id=department_id,
+        confidentiality=confidentiality,
+        retention_period_days=retention_period_days,
+        expires_at=expires_at,
         ip_address=_get_client_ip(request),
     )
     return {
@@ -104,45 +199,117 @@ async def upload_document(
 
 
 # =============================================================================
-# GET /documents/{document_id}/download — file download (Milestone 5)
+# 2. Bulk Operations (Declared BEFORE /{document_id})
 # =============================================================================
 
 
-@router.get(
-    "/{document_id}/download",
+@router.post(
+    "/bulk/archive",
     status_code=status.HTTP_200_OK,
-    summary="Download document file",
-    description=(
-        "Streams the physical file binary with Content-Disposition headers. "
-        "Requires authentication. Non-admin users may only download their own documents."
-    ),
-    responses={
-        200: {"description": "File stream."},
-        401: {"description": "Not authenticated."},
-        403: {"description": "Access denied."},
-        404: {"description": "Document or physical file not found."},
-    },
+    summary="Bulk archive documents",
+    response_model=BulkOperationResponse,
 )
-async def download_document(
-    document_id: uuid.UUID,
+async def bulk_archive_documents(
+    payload: BulkDocumentIdsRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
-) -> FileResponse:
-    """Stream the physical file to the client."""
-    file_path, file_name, content_type, file_size = await svc.get_document_file_path(
-        document_id=document_id,
+) -> BulkOperationResponse:
+    """Archive multiple documents with per-item RBAC verification."""
+    return await svc.bulk_archive(
+        payload.document_ids,
         actor=current_user,
+        ip_address=_get_client_ip(request),
     )
-    return FileResponse(
-        path=file_path,
-        filename=file_name,
-        media_type=content_type,
-        headers={"Content-Length": str(file_size)},
+
+
+@router.post(
+    "/bulk/restore",
+    status_code=status.HTTP_200_OK,
+    summary="Bulk restore documents",
+    response_model=BulkOperationResponse,
+)
+async def bulk_restore_documents(
+    payload: BulkDocumentIdsRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> BulkOperationResponse:
+    """Restore multiple archived/deleted documents."""
+    return await svc.bulk_restore(
+        payload.document_ids,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.post(
+    "/bulk/delete",
+    status_code=status.HTTP_200_OK,
+    summary="Bulk delete documents",
+    response_model=BulkOperationResponse,
+)
+async def bulk_delete_documents(
+    payload: BulkDocumentIdsRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> BulkOperationResponse:
+    """Soft-delete multiple documents."""
+    return await svc.bulk_delete(
+        payload.document_ids,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.post(
+    "/bulk/tag",
+    status_code=status.HTTP_200_OK,
+    summary="Bulk tag documents",
+    response_model=BulkOperationResponse,
+)
+async def bulk_tag_documents(
+    payload: BulkTagRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> BulkOperationResponse:
+    """Add or replace tags across multiple documents."""
+    return await svc.bulk_tag(
+        payload.document_ids,
+        tags=payload.tags,
+        replace=payload.replace,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.post(
+    "/bulk/share",
+    status_code=status.HTTP_200_OK,
+    summary="Bulk share documents",
+    response_model=BulkOperationResponse,
+)
+async def bulk_share_documents(
+    payload: BulkShareRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> BulkOperationResponse:
+    """Share multiple documents with a specific user."""
+    return await svc.bulk_share(
+        payload.document_ids,
+        target_user_id=payload.user_id,
+        permission=payload.permission,
+        expires_at=payload.expires_at,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
     )
 
 
 # =============================================================================
-# GET /documents — list (with search, status filter, sort, pagination)
+# 3. Document Listings & Creation
 # =============================================================================
 
 
@@ -150,107 +317,58 @@ async def download_document(
     "",
     status_code=status.HTTP_200_OK,
     summary="List documents",
-    description=(
-        "Returns a paginated list of document metadata. "
-        "Supports search by filename, status filtering, and sorting. "
-        "admin/hr see all documents; other roles see only their own."
-    ),
-    responses={
-        200: {"description": "Documents retrieved successfully."},
-        401: {"description": "Not authenticated."},
-    },
+    response_model=PaginatedDocumentResponse,
 )
 async def list_documents(
-    page: int = Query(default=1, ge=1, description="Page number (1-based)."),
-    page_size: int = Query(default=20, ge=1, le=100, description="Records per page."),
-    search: str | None = Query(default=None, description="Case-insensitive filename search."),
-    status_filter: DocumentStatus | None = Query(
-        default=None,
-        alias="status",
-        description="Filter by document status (pending, processing, processed, failed).",
-    ),
-    sort: str | None = Query(
-        default="-created_at",
-        description="Sort by created_at, -created_at, file_name, -file_name, file_size, -file_size.",
-    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    search: str | None = Query(default=None),
+    status_filter: DocumentStatus | None = Query(default=None, alias="status"),
+    lifecycle_status: DocumentLifecycleStatus | None = Query(default=None),
+    department_id: uuid.UUID | None = Query(default=None),
+    owner_id: uuid.UUID | None = Query(default=None),
+    category: str | None = Query(default=None),
+    document_type: str | None = Query(default=None),
+    confidentiality: DocumentConfidentiality | None = Query(default=None),
+    tag: str | None = Query(default=None),
+    shared_with_me: bool = Query(default=False),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    sort: str | None = Query(default="-created_at"),
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
-) -> dict[str, Any]:
-    """List documents with search, filter, sort, and pagination."""
+) -> PaginatedDocumentResponse:
+    """List documents with comprehensive enterprise filtering and RBAC."""
     if sort and sort not in _VALID_SORT_FIELDS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sort parameter '{sort}'. Allowed values: {', '.join(sorted(_VALID_SORT_FIELDS))}",
+            detail=f"Invalid sort parameter '{sort}'. Allowed: {', '.join(sorted(_VALID_SORT_FIELDS))}",
         )
 
-    result = await svc.list_documents(
+    return await svc.list_documents(
         actor=current_user,
         page=page,
         page_size=page_size,
         search=search,
         status_filter=status_filter,
+        lifecycle_status=lifecycle_status,
+        department_id=department_id,
+        owner_id=owner_id,
+        category=category,
+        document_type=document_type,
+        confidentiality=confidentiality,
+        tag=tag,
+        shared_with_me=shared_with_me,
+        date_from=date_from,
+        date_to=date_to,
         sort=sort,
     )
-    return {
-        "success": True,
-        "message": result.message,
-        "data": [d.model_dump(mode="json") for d in result.data],
-        "meta": result.meta,
-    }
-
-
-# =============================================================================
-# GET /documents/{document_id} — get metadata
-# =============================================================================
-
-
-@router.get(
-    "/{document_id}",
-    status_code=status.HTTP_200_OK,
-    summary="Get a document by ID",
-    description=(
-        "Returns metadata for a single document. "
-        "Returns 403 if the caller does not own the document (unless admin/hr)."
-    ),
-    responses={
-        200: {"description": "Document retrieved successfully."},
-        401: {"description": "Not authenticated."},
-        403: {"description": "Access denied."},
-        404: {"description": "Document not found."},
-    },
-)
-async def get_document(
-    document_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    svc: DocumentService = Depends(_get_service),
-) -> dict[str, Any]:
-    """Return metadata for a single document."""
-    doc = await svc.get_document(document_id, actor=current_user)
-    return {
-        "success": True,
-        "message": "Document retrieved successfully.",
-        "data": doc.model_dump(mode="json"),
-    }
-
-
-# =============================================================================
-# POST /documents — create metadata (backwards compatibility)
-# =============================================================================
 
 
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    summary="Create a document metadata record",
-    description=(
-        "Creates a document metadata record. "
-        "The owner is always the authenticated user — never from the request body. "
-        "status and ocr_status are initialised to 'pending' by the server."
-    ),
-    responses={
-        201: {"description": "Document created successfully."},
-        401: {"description": "Not authenticated."},
-    },
+    summary="Create document metadata",
 )
 async def create_document(
     data: DocumentCreate,
@@ -258,7 +376,7 @@ async def create_document(
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
 ) -> dict[str, Any]:
-    """Create a document metadata record owned by the authenticated user."""
+    """Create a document metadata record (backwards compatibility)."""
     doc = await svc.create_document(
         data,
         actor=current_user,
@@ -272,25 +390,33 @@ async def create_document(
 
 
 # =============================================================================
-# PATCH /documents/{document_id} — update metadata
+# 4. Single Document Operations
 # =============================================================================
+
+
+@router.get(
+    "/{document_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get document metadata",
+)
+async def get_document(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Retrieve metadata for a single document."""
+    doc = await svc.get_document(document_id, actor=current_user)
+    return {
+        "success": True,
+        "message": "Document retrieved successfully.",
+        "data": doc.model_dump(mode="json"),
+    }
 
 
 @router.patch(
     "/{document_id}",
     status_code=status.HTTP_200_OK,
     summary="Update document metadata",
-    description=(
-        "Partially updates allowed metadata fields: file_name, file_type, checksum. "
-        "status, ocr_status, storage_path, and owner_id are immutable. "
-        "Returns 403 if the caller does not own the document (unless admin/hr)."
-    ),
-    responses={
-        200: {"description": "Document updated successfully."},
-        401: {"description": "Not authenticated."},
-        403: {"description": "Access denied."},
-        404: {"description": "Document not found."},
-    },
 )
 async def update_document(
     document_id: uuid.UUID,
@@ -299,7 +425,7 @@ async def update_document(
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
 ) -> dict[str, Any]:
-    """Update allowed metadata fields for a document."""
+    """Update allowed metadata fields."""
     doc = await svc.update_document(
         document_id,
         data,
@@ -313,25 +439,10 @@ async def update_document(
     }
 
 
-# =============================================================================
-# DELETE /documents/{document_id} — soft-delete
-# =============================================================================
-
-
 @router.delete(
     "/{document_id}",
     status_code=status.HTTP_200_OK,
     summary="Delete a document",
-    description=(
-        "Soft-deletes a document record and creates an audit trail entry. "
-        "Returns 403 if the caller does not own the document (unless admin/hr)."
-    ),
-    responses={
-        200: {"description": "Document deleted successfully."},
-        401: {"description": "Not authenticated."},
-        403: {"description": "Access denied."},
-        404: {"description": "Document not found."},
-    },
 )
 async def delete_document(
     document_id: uuid.UUID,
@@ -339,7 +450,7 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
 ) -> dict[str, Any]:
-    """Soft-delete a document — checks ownership in service."""
+    """Soft-delete a document."""
     await svc.delete_document(
         document_id,
         actor=current_user,
@@ -352,24 +463,497 @@ async def delete_document(
 
 
 # =============================================================================
-# POST /documents/{document_id}/ocr — trigger OCR task (Milestone 6)
+# 5. Downloads & Previews
+# =============================================================================
+
+
+@router.get(
+    "/{document_id}/download",
+    status_code=status.HTTP_200_OK,
+    summary="Download current document file",
+)
+async def download_document(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> FileResponse:
+    """Stream the active document file binary."""
+    file_path, file_name, content_type, file_size = await svc.get_document_file_path(
+        document_id=document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type=content_type,
+        headers={"Content-Length": str(file_size)},
+    )
+
+
+@router.get(
+    "/{document_id}/preview",
+    status_code=status.HTTP_200_OK,
+    summary="Preview current document file inline",
+)
+async def preview_document(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> FileResponse:
+    """Stream document binary inline for in-browser rendering."""
+    file_path, file_name, content_type, file_size = await svc.get_document_preview_path(
+        document_id=document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type=content_type,
+        headers={
+            "Content-Length": str(file_size),
+            "Content-Disposition": f"inline; filename={file_name}",
+        },
+    )
+
+
+# =============================================================================
+# 6. Lifecycle Endpoints
+# =============================================================================
+
+
+@router.post(
+    "/{document_id}/activate",
+    status_code=status.HTTP_200_OK,
+    summary="Activate document",
+)
+async def activate_document(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Transition document state to ACTIVE."""
+    doc = await svc.activate_document(
+        document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Document activated successfully.",
+        "data": doc.model_dump(mode="json"),
+    }
+
+
+@router.post(
+    "/{document_id}/archive",
+    status_code=status.HTTP_200_OK,
+    summary="Archive document",
+)
+async def archive_document(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Transition document state to ARCHIVED."""
+    doc = await svc.archive_document(
+        document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Document archived successfully.",
+        "data": doc.model_dump(mode="json"),
+    }
+
+
+@router.post(
+    "/{document_id}/restore",
+    status_code=status.HTTP_200_OK,
+    summary="Restore document to active state",
+)
+async def restore_document(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Restore document to ACTIVE."""
+    doc = await svc.restore_document(
+        document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Document restored successfully.",
+        "data": doc.model_dump(mode="json"),
+    }
+
+
+@router.post(
+    "/{document_id}/expire",
+    status_code=status.HTTP_200_OK,
+    summary="Mark document as expired",
+)
+async def expire_document(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Transition document state to EXPIRED."""
+    doc = await svc.expire_document(
+        document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Document expired successfully.",
+        "data": doc.model_dump(mode="json"),
+    }
+
+
+# =============================================================================
+# 7. Document Versions
+# =============================================================================
+
+
+@router.post(
+    "/{document_id}/versions",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(
+            RateLimiter(
+                max_requests=settings.RATE_LIMIT_DOCUMENT_UPLOAD,
+                window_seconds=60,
+                group="doc_version_upload",
+            )
+        )
+    ],
+    summary="Upload new document version",
+)
+async def upload_document_version(
+    document_id: uuid.UUID,
+    request: Request,
+    file: UploadFile = File(..., description="Replacement version file."),
+    change_summary: str | None = Form(default=None),
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Upload a new version for an existing document."""
+    version = await svc.create_new_version(
+        document_id,
+        file,
+        actor=current_user,
+        change_summary=change_summary,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "New document version created successfully.",
+        "data": version.model_dump(mode="json"),
+    }
+
+
+@router.get(
+    "/{document_id}/versions",
+    status_code=status.HTTP_200_OK,
+    summary="List document versions",
+)
+async def list_document_versions(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """List all versions for a document."""
+    versions = await svc.list_versions(document_id, actor=current_user)
+    return {
+        "success": True,
+        "message": "Document versions retrieved successfully.",
+        "data": [v.model_dump(mode="json") for v in versions],
+        "total_versions": len(versions),
+    }
+
+
+@router.get(
+    "/{document_id}/versions/{version_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get version metadata",
+)
+async def get_document_version(
+    document_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Get metadata for a specific document version."""
+    version = await svc.get_version(document_id, version_id, actor=current_user)
+    return {
+        "success": True,
+        "message": "Version retrieved successfully.",
+        "data": version.model_dump(mode="json"),
+    }
+
+
+@router.post(
+    "/{document_id}/versions/{version_id}/restore",
+    status_code=status.HTTP_200_OK,
+    summary="Restore a previous document version",
+)
+async def restore_document_version(
+    document_id: uuid.UUID,
+    version_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Restore a previous version by creating a new active version from it."""
+    version = await svc.restore_version(
+        document_id,
+        version_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": f"Version {version.version_number} created from historical restore.",
+        "data": version.model_dump(mode="json"),
+    }
+
+
+@router.get(
+    "/{document_id}/versions/{version_id}/download",
+    status_code=status.HTTP_200_OK,
+    summary="Download specific document version",
+)
+async def download_document_version(
+    document_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> FileResponse:
+    """Stream download a specific version file binary."""
+    file_path, file_name, content_type, file_size = await svc.get_version_file_path(
+        document_id=document_id,
+        version_id=version_id,
+        actor=current_user,
+    )
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type=content_type,
+        headers={"Content-Length": str(file_size)},
+    )
+
+
+# =============================================================================
+# 8. Document Sharing & Access Grants
+# =============================================================================
+
+
+@router.post(
+    "/{document_id}/shares",
+    status_code=status.HTTP_201_CREATED,
+    summary="Share document with user",
+)
+async def share_document(
+    document_id: uuid.UUID,
+    payload: DocumentShareCreate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Grant document access permissions to a user."""
+    share = await svc.share_document(
+        document_id,
+        payload,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Document shared successfully.",
+        "data": share.model_dump(mode="json"),
+    }
+
+
+@router.get(
+    "/{document_id}/shares",
+    status_code=status.HTTP_200_OK,
+    summary="List document access grants",
+)
+async def list_document_shares(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """List all active shares for a document."""
+    shares = await svc.list_shares(document_id, actor=current_user)
+    return {
+        "success": True,
+        "message": "Shares retrieved successfully.",
+        "data": [s.model_dump(mode="json") for s in shares],
+    }
+
+
+@router.patch(
+    "/{document_id}/shares/{share_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Update document share",
+)
+async def update_document_share(
+    document_id: uuid.UUID,
+    share_id: uuid.UUID,
+    payload: DocumentShareUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Update permissions or expiration on a share grant."""
+    share = await svc.update_share(
+        document_id,
+        share_id,
+        payload,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Share updated successfully.",
+        "data": share.model_dump(mode="json"),
+    }
+
+
+@router.delete(
+    "/{document_id}/shares/{share_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Revoke document share",
+)
+async def revoke_document_share(
+    document_id: uuid.UUID,
+    share_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> dict[str, Any]:
+    """Revoke a document access grant."""
+    await svc.revoke_share(
+        document_id,
+        share_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+    return {
+        "success": True,
+        "message": "Access grant revoked successfully.",
+    }
+
+
+# =============================================================================
+# 9. Activity Timeline
+# =============================================================================
+
+
+@router.get(
+    "/{document_id}/activity",
+    status_code=status.HTTP_200_OK,
+    summary="Get document activity timeline",
+    response_model=DocumentActivityResponse,
+)
+async def get_document_activity(
+    document_id: uuid.UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+) -> DocumentActivityResponse:
+    """Retrieve sanitized chronological audit events for a document."""
+    return await svc.get_document_activity(
+        document_id,
+        actor=current_user,
+        limit=limit,
+        offset=offset,
+    )
+
+
+# =============================================================================
+# 10. Document AI Intelligence
+# =============================================================================
+
+
+@router.post(
+    "/{document_id}/ai/summary",
+    status_code=status.HTTP_200_OK,
+    dependencies=[
+        Depends(
+            RateLimiter(
+                max_requests=settings.RATE_LIMIT_AI_CHAT, window_seconds=60, group="doc_ai_summary"
+            )
+        )
+    ],
+    summary="Generate AI summary of document",
+    response_model=DocumentAISummaryResponse,
+)
+async def generate_document_summary(
+    document_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    ai_svc: DocumentAIService = Depends(_get_ai_service),
+) -> DocumentAISummaryResponse:
+    """Generate an AI executive summary for a document."""
+    return await ai_svc.generate_summary(
+        document_id,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.post(
+    "/{document_id}/ai/chat",
+    status_code=status.HTTP_200_OK,
+    dependencies=[
+        Depends(
+            RateLimiter(
+                max_requests=settings.RATE_LIMIT_AI_CHAT, window_seconds=60, group="doc_ai_chat"
+            )
+        )
+    ],
+    summary="Document-scoped AI Q&A",
+    response_model=DocumentAIChatResponse,
+)
+async def document_ai_chat(
+    document_id: uuid.UUID,
+    payload: DocumentAIChatRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    ai_svc: DocumentAIService = Depends(_get_ai_service),
+) -> DocumentAIChatResponse:
+    """Chat conversational Q&A strictly scoped to a single document."""
+    return await ai_svc.document_chat(
+        document_id,
+        payload,
+        actor=current_user,
+        ip_address=_get_client_ip(request),
+    )
+
+
+# =============================================================================
+# 11. OCR & Text Extraction (Milestone 6)
 # =============================================================================
 
 
 @router.post(
     "/{document_id}/ocr",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Trigger asynchronous OCR and text extraction",
-    description=(
-        "Enqueues a Celery background job to extract text from the document, "
-        "chunk the text, persist chunks, and update OCR status."
-    ),
-    responses={
-        202: {"description": "OCR job enqueued."},
-        401: {"description": "Not authenticated."},
-        403: {"description": "Access denied."},
-        404: {"description": "Document not found."},
-    },
+    summary="Trigger asynchronous OCR",
 )
 async def trigger_document_ocr(
     document_id: uuid.UUID,
@@ -394,29 +978,17 @@ async def trigger_document_ocr(
     }
 
 
-# =============================================================================
-# GET /documents/{document_id}/text — retrieve extracted text & chunks (Milestone 6)
-# =============================================================================
-
-
 @router.get(
     "/{document_id}/text",
     status_code=status.HTTP_200_OK,
-    summary="Get extracted document text and chunks",
-    description="Returns full reconstructed text along with ordered chunks for a document.",
-    responses={
-        200: {"description": "Extracted text and chunks."},
-        401: {"description": "Not authenticated."},
-        403: {"description": "Access denied."},
-        404: {"description": "Document not found."},
-    },
+    summary="Get extracted text and chunks",
 )
 async def get_document_text(
     document_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     ocr_svc: OCRService = Depends(_get_ocr_service),
 ) -> dict[str, Any]:
-    """Retrieve full extracted text and chunk breakdown for a document."""
+    """Retrieve full extracted text and chunk breakdown."""
     text_data = await ocr_svc.get_document_text(
         document_id=document_id,
         actor=current_user,

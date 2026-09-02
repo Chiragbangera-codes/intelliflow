@@ -39,8 +39,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
+from app.middleware.rate_limit import RateLimiter
 from app.models.user import User
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.schemas.ai import AIChatRequest, AIChatResponse, AIChatResponseData
@@ -110,9 +112,17 @@ def _get_audit_repo(db: AsyncSession = Depends(get_db)) -> AuditLogRepository:
         401: {"description": "Not authenticated."},
         403: {"description": "Conversation belongs to another user."},
         422: {"description": "Invalid request (blank message, top_k out of range, etc.)."},
+        429: {"description": "Too many AI chat requests."},
         503: {"description": "AI service temporarily unavailable."},
         500: {"description": "Unexpected internal error."},
     },
+    dependencies=[
+        Depends(
+            RateLimiter(
+                max_requests=settings.RATE_LIMIT_AI_CHAT, window_seconds=60, group="ai_chat"
+            )
+        )
+    ],
 )
 async def ai_chat(
     payload: AIChatRequest,

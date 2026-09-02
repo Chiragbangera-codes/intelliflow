@@ -1,35 +1,37 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ExtractedTextViewerModal } from "@/components/documents/ExtractedTextViewerModal";
-import { useAuthStore } from "@/store/auth.store";
+import { ShareDocumentModal } from "@/components/documents/ShareDocumentModal";
+import { UploadVersionModal } from "@/components/documents/UploadVersionModal";
+import { BulkActionsBar } from "@/components/documents/BulkActionsBar";
+import { DocumentAISummaryModal } from "@/components/documents/DocumentAISummaryModal";
+import { DocumentAIChatModal } from "@/components/documents/DocumentAIChatModal";
 import {
   getDocuments,
   uploadDocument,
   downloadDocument,
-  updateDocument,
   deleteDocument,
+  archiveDocument,
+  restoreDocument,
 } from "@/services/document.service";
-import { startOCR, getOCRJobStatus } from "@/services/ocr.service";
 import type {
-  Document,
+  DocumentConfidentiality,
+  DocumentLifecycleStatus,
   DocumentQueryParams,
   DocumentSortField,
-  DocumentStatus,
+  EnterpriseDocument,
   PaginationMeta,
 } from "@/types";
 
-const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"];
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
-
 export default function DocumentsPage() {
-  const { user } = useAuthStore();
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<EnterpriseDocument[]>([]);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,42 +40,33 @@ export default function DocumentsPage() {
   // Search & Filter State
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">("all");
+  const [lifecycleFilter, setLifecycleFilter] = useState<DocumentLifecycleStatus | "all">("all");
+  const [confidentialityFilter, setConfidentialityFilter] = useState<DocumentConfidentiality | "all">("all");
+  const [sharedWithMe, setSharedWithMe] = useState(false);
   const [sortField, setSortField] = useState<DocumentSortField>("-created_at");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Upload Modal & State
+  // Multi-Selection State for Bulk Operations
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Modals & Action Targets
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("General");
+  const [uploadConfidentiality, setUploadConfidentiality] = useState<DocumentConfidentiality>("internal");
+  const [uploadTags, setUploadTags] = useState("");
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Details & Action Modals State
-  const [detailsDoc, setDetailsDoc] = useState<Document | null>(null);
-  const [textViewerDoc, setTextViewerDoc] = useState<Document | null>(null);
-  const [editDoc, setEditDoc] = useState<Document | null>(null);
-  const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
-  const [editFileName, setEditFileName] = useState("");
-  const [actionLoading, setActionLoading] = useState(false);
-  const [copiedHash, setCopiedHash] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
-  // OCR Processing state tracking & active polling timers
-  const [processingOcrIds, setProcessingOcrIds] = useState<Record<string, boolean>>({});
-  const pollTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
-
-  const canManageAll = user?.role === "admin" || user?.role === "hr";
-
-  // Cleanup polling timers on unmount
-  useEffect(() => {
-    const activeTimers = pollTimersRef.current;
-    return () => {
-      Object.values(activeTimers).forEach((timer) => clearInterval(timer));
-    };
-  }, []);
+  // Specific Feature Modals
+  const [shareDoc, setShareDoc] = useState<EnterpriseDocument | null>(null);
+  const [versionDoc, setVersionDoc] = useState<EnterpriseDocument | null>(null);
+  const [summaryDoc, setSummaryDoc] = useState<EnterpriseDocument | null>(null);
+  const [chatDoc, setChatDoc] = useState<EnterpriseDocument | null>(null);
+  const [textViewerDoc, setTextViewerDoc] = useState<EnterpriseDocument | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<EnterpriseDocument | null>(null);
 
   // Debounce search input (300ms)
   useEffect(() => {
@@ -84,8 +77,8 @@ export default function DocumentsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Refresh data helper
-  const refreshDocuments = useCallback(
+  // Fetch Documents
+  const fetchDocuments = useCallback(
     async (page: number = currentPage) => {
       try {
         setLoading(true);
@@ -94,605 +87,481 @@ export default function DocumentsPage() {
           page,
           page_size: 15,
           search: debouncedSearch,
-          status: statusFilter,
+          lifecycle_status: lifecycleFilter,
+          confidentiality: confidentialityFilter,
+          shared_with_me: sharedWithMe ? true : undefined,
           sort: sortField,
         };
         const res = await getDocuments(params);
-        if (res.success) {
-          setDocuments(res.data);
-          if (res.meta) setMeta(res.meta);
-        }
+        setDocuments(res.data || []);
+        if (res.meta) setMeta(res.meta);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to load documents";
+        const msg = err instanceof Error ? err.message : "Failed to load documents.";
         setError(msg);
       } finally {
         setLoading(false);
       }
     },
-    [currentPage, debouncedSearch, statusFilter, sortField],
+    [currentPage, debouncedSearch, lifecycleFilter, confidentialityFilter, sharedWithMe, sortField],
   );
 
   useEffect(() => {
-    let isSubscribed = true;
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
-        const params: DocumentQueryParams = {
-          page: currentPage,
-          page_size: 15,
-          search: debouncedSearch,
-          status: statusFilter,
-          sort: sortField,
-        };
-        const res = await getDocuments(params);
-        if (isSubscribed && res.success) {
-          setDocuments(res.data);
-          if (res.meta) setMeta(res.meta);
-        }
-      } catch (err: unknown) {
-        if (isSubscribed) {
-          const msg = err instanceof Error ? err.message : "Failed to load documents";
-          setError(msg);
-        }
-      } finally {
-        if (isSubscribed) {
-          setLoading(false);
-        }
-      }
-    }
-    fetchData();
-    return () => {
-      isSubscribed = false;
-    };
-  }, [currentPage, debouncedSearch, statusFilter, sortField]);
+    fetchDocuments(currentPage);
+  }, [fetchDocuments, currentPage]);
 
-  // File size formatter
-  const formatFileSize = (bytes?: number | null) => {
-    if (!bytes || bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-  };
-
-  // Status variant mapping
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "processed":
-      case "completed":
-        return "success";
-      case "processing":
-        return "warning";
-      case "failed":
-        return "danger";
-      case "skipped":
-        return "neutral";
-      default:
-        return "info";
+  // Selection Handlers
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(documents.map((d) => d.id));
+    } else {
+      setSelectedIds([]);
     }
   };
 
-  // File icon generator
-  const renderFileIcon = (fileName: string, type?: string | null) => {
-    const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
-    if (ext === ".pdf" || type?.includes("pdf")) {
-      return (
-        <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/60 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </svg>
-        </div>
-      );
-    }
-    if (ext === ".docx" || type?.includes("word")) {
-      return (
-        <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-      );
-    }
-    if (ext === ".xlsx" || type?.includes("sheet") || type?.includes("excel")) {
-      return (
-        <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-      );
-    }
-    return (
-      <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      </div>
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
   };
 
-  // Drag and drop handlers
-  const handleDragOver = (e: React.DragEvent) => {
+  // Upload Handler
+  const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsDragOver(true);
-  };
+    if (!uploadFile) return;
 
-  const handleDragLeave = () => {
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      validateAndSetFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      validateAndSetFile(e.target.files[0]);
-    }
-  };
-
-  const validateAndSetFile = (file: File) => {
-    setUploadError(null);
-    if (!file || file.size === 0) {
-      setUploadError("Cannot upload an empty file (0 bytes).");
-      setSelectedFile(null);
-      return;
-    }
-    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setUploadError(
-        `Unsupported format (${ext}). Allowed formats: ${ALLOWED_EXTENSIONS.join(", ")}`,
-      );
-      setSelectedFile(null);
-      return;
-    }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setUploadError("File exceeds the maximum limit of 25 MB.");
-      setSelectedFile(null);
-      return;
-    }
-    setSelectedFile(file);
-  };
-
-  const handleUploadSubmit = async () => {
-    if (!selectedFile) return;
     try {
       setUploading(true);
-      setUploadProgress(0);
       setUploadError(null);
+      const parsedTags = uploadTags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
 
-      await uploadDocument(selectedFile, (progress) => {
-        setUploadProgress(progress);
+      await uploadDocument(uploadFile, {
+        title: uploadTitle || uploadFile.name,
+        category: uploadCategory,
+        confidentiality: uploadConfidentiality,
+        tags: parsedTags,
+        onUploadProgress: (p) => setUploadProgress(p),
       });
 
-      setSuccessMessage(`Successfully uploaded "${selectedFile.name}"`);
-      setSelectedFile(null);
-      setUploadProgress(null);
+      setSuccessMessage("Document uploaded successfully.");
       setIsUploadModalOpen(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      refreshDocuments(1);
-      setTimeout(() => setSuccessMessage(null), 4000);
+      setUploadFile(null);
+      setUploadTitle("");
+      setUploadTags("");
+      setUploadProgress(null);
+      fetchDocuments(1);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to upload document";
+      const msg = err instanceof Error ? err.message : "Upload failed.";
       setUploadError(msg);
     } finally {
       setUploading(false);
     }
   };
 
-  // Download handler
-  const handleDownload = async (doc: Document) => {
+  // Lifecycle Action Handlers
+  const handleArchive = async (id: string) => {
     try {
-      setDownloadingId(doc.id);
-      await downloadDocument(doc.id, doc.file_name);
+      await archiveDocument(id);
+      setSuccessMessage("Document archived.");
+      fetchDocuments();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to download document";
-      alert(msg);
-    } finally {
-      setDownloadingId(null);
+      setError(err instanceof Error ? err.message : "Archive failed.");
     }
   };
 
-  // OCR Trigger & Polling Handler (Milestone 6)
-  const handleTriggerOCR = async (doc: Document) => {
+  const handleRestore = async (id: string) => {
     try {
-      setProcessingOcrIds((prev) => ({ ...prev, [doc.id]: true }));
-      const res = await startOCR(doc.id);
-      if (res.success && res.data) {
-        const jobId = res.data.job_id;
-
-        // Update local document status
-        setDocuments((prev) =>
-          prev.map((d) => (d.id === doc.id ? { ...d, ocr_status: "processing" } : d)),
-        );
-        if (detailsDoc?.id === doc.id) {
-          setDetailsDoc((d) => (d ? { ...d, ocr_status: "processing" } : null));
-        }
-
-        // Poll Celery job status every 1.5s
-        const interval = setInterval(async () => {
-          try {
-            const statusRes = await getOCRJobStatus(jobId);
-            if (statusRes.success && statusRes.data) {
-              const currentStatus = statusRes.data.status;
-              if (currentStatus === "COMPLETED") {
-                clearInterval(interval);
-                delete pollTimersRef.current[doc.id];
-                setProcessingOcrIds((prev) => {
-                  const next = { ...prev };
-                  delete next[doc.id];
-                  return next;
-                });
-                setDocuments((prev) =>
-                  prev.map((d) => (d.id === doc.id ? { ...d, ocr_status: "completed" } : d)),
-                );
-                if (detailsDoc?.id === doc.id) {
-                  setDetailsDoc((d) => (d ? { ...d, ocr_status: "completed" } : null));
-                }
-                setSuccessMessage(`OCR processing completed for "${doc.file_name}"`);
-                setTimeout(() => setSuccessMessage(null), 4000);
-              } else if (currentStatus === "FAILED") {
-                clearInterval(interval);
-                delete pollTimersRef.current[doc.id];
-                setProcessingOcrIds((prev) => {
-                  const next = { ...prev };
-                  delete next[doc.id];
-                  return next;
-                });
-                setDocuments((prev) =>
-                  prev.map((d) => (d.id === doc.id ? { ...d, ocr_status: "failed" } : d)),
-                );
-                if (detailsDoc?.id === doc.id) {
-                  setDetailsDoc((d) => (d ? { ...d, ocr_status: "failed" } : null));
-                }
-              }
-            }
-          } catch {
-            clearInterval(interval);
-            delete pollTimersRef.current[doc.id];
-            setProcessingOcrIds((prev) => {
-              const next = { ...prev };
-              delete next[doc.id];
-              return next;
-            });
-          }
-        }, 1500);
-
-        pollTimersRef.current[doc.id] = interval;
-      }
+      await restoreDocument(id);
+      setSuccessMessage("Document restored to active state.");
+      fetchDocuments();
     } catch (err: unknown) {
-      setProcessingOcrIds((prev) => {
-        const next = { ...prev };
-        delete next[doc.id];
-        return next;
-      });
-      const msg = err instanceof Error ? err.message : "Failed to trigger OCR processing";
-      alert(msg);
+      setError(err instanceof Error ? err.message : "Restore failed.");
     }
   };
 
-  // Edit metadata handler
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editDoc || !editFileName.trim()) return;
-
-    try {
-      setActionLoading(true);
-      await updateDocument(editDoc.id, {
-        file_name: editFileName.trim(),
-      });
-      setEditDoc(null);
-      refreshDocuments(currentPage);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update metadata";
-      alert(msg);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Delete handler
   const handleDeleteConfirm = async () => {
     if (!deleteDoc) return;
     try {
-      setActionLoading(true);
       await deleteDocument(deleteDoc.id);
+      setSuccessMessage("Document deleted.");
       setDeleteDoc(null);
-      refreshDocuments(currentPage);
+      fetchDocuments();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to delete document";
-      alert(msg);
-    } finally {
-      setActionLoading(false);
+      setError(err instanceof Error ? err.message : "Delete failed.");
     }
   };
 
-  // Copy hash helper
-  const handleCopyHash = (hash: string) => {
-    navigator.clipboard.writeText(hash);
-    setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2000);
+  // Helper formatting
+  const getConfidentialityBadge = (conf: DocumentConfidentiality) => {
+    switch (conf) {
+      case "public":
+        return <Badge variant="neutral" className="text-xs">Public</Badge>;
+      case "internal":
+        return <Badge variant="primary" className="text-xs">Internal</Badge>;
+      case "confidential":
+        return <Badge variant="warning" className="text-xs">Confidential</Badge>;
+      case "restricted":
+        return <Badge variant="danger" className="text-xs">Restricted</Badge>;
+      default:
+        return null;
+    }
+  };
+
+  const getLifecycleBadge = (status: DocumentLifecycleStatus) => {
+    switch (status) {
+      case "active":
+        return <Badge variant="success" className="text-xs">Active</Badge>;
+      case "draft":
+        return <Badge variant="neutral" className="text-xs">Draft</Badge>;
+      case "archived":
+        return <Badge variant="warning" className="text-xs">Archived</Badge>;
+      case "expired":
+        return <Badge variant="danger" className="text-xs">Expired</Badge>;
+      case "deleted":
+        return <Badge variant="danger" className="text-xs">Deleted</Badge>;
+      default:
+        return null;
+    }
   };
 
   return (
-    <DashboardLayout
-      title="Document Management & OCR Intelligence"
-      description="Upload documents, execute automated text extraction, search contents, and inspect structured data chunks."
-    >
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Top Actions & Header Bar */}
+        {/* Header banner */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
-              All Documents
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Secure multi-format repository with automated OCR processing
+            <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Document Intelligence</h1>
+            <p className="text-sm text-slate-400 mt-1">
+              Enterprise document repository with immutable versioning, RBAC access grants, AI synthesis & audit trails.
             </p>
           </div>
-
           <button
-            type="button"
-            onClick={() => {
-              setUploadError(null);
-              setSelectedFile(null);
-              setUploadProgress(null);
-              setIsUploadModalOpen(true);
-            }}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 self-start sm:self-auto"
+            onClick={() => setIsUploadModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            <span>Upload Document</span>
+            Upload Document
           </button>
         </div>
 
-        {/* Success Alert Banner */}
+        {/* Success / Error Banners */}
         {successMessage && (
-          <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-sm flex items-center justify-between animate-fadeIn">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span>{successMessage}</span>
-            </div>
-            <button onClick={() => setSuccessMessage(null)} className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-xl flex items-center justify-between">
+            <span>{successMessage}</span>
+            <button onClick={() => setSuccessMessage(null)} className="text-emerald-300 text-xs hover:underline">
+              Dismiss
+            </button>
+          </div>
+        )}
+        {error && (
+          <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-300 text-xs hover:underline">
+              Dismiss
             </button>
           </div>
         )}
 
-        {/* Filter, Search & Sort Bar */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 shadow-sm space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+        {/* Filter Toolbar */}
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* Search */}
+            <div className="lg:col-span-2">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search documents by file name..."
-                className="w-full pl-10 pr-10 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                placeholder="Search documents by title, file name, tags..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
             </div>
 
-            {/* Sorting Dropdown */}
-            <div className="flex items-center gap-2 shrink-0">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Sort By:
-              </label>
+            {/* Lifecycle */}
+            <div>
+              <select
+                value={lifecycleFilter}
+                onChange={(e) => setLifecycleFilter(e.target.value as DocumentLifecycleStatus | "all")}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Lifecycles</option>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+                <option value="archived">Archived</option>
+                <option value="expired">Expired</option>
+              </select>
+            </div>
+
+            {/* Confidentiality */}
+            <div>
+              <select
+                value={confidentialityFilter}
+                onChange={(e) => setConfidentialityFilter(e.target.value as DocumentConfidentiality | "all")}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Confidentiality</option>
+                <option value="public">Public</option>
+                <option value="internal">Internal</option>
+                <option value="confidential">Confidential</option>
+                <option value="restricted">Restricted</option>
+              </select>
+            </div>
+
+            {/* Sort */}
+            <div>
               <select
                 value={sortField}
                 onChange={(e) => setSortField(e.target.value as DocumentSortField)}
-                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="-created_at">Newest First</option>
                 <option value="created_at">Oldest First</option>
-                <option value="file_name">Name (A-Z)</option>
-                <option value="-file_name">Name (Z-A)</option>
-                <option value="file_size">Size (Small to Large)</option>
-                <option value="-file_size">Size (Large to Small)</option>
+                <option value="title">Title (A-Z)</option>
+                <option value="-title">Title (Z-A)</option>
+                <option value="-file_size">Largest Size</option>
               </select>
             </div>
           </div>
 
-          {/* Status Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pt-1">
-            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mr-1">
-              Status:
-            </span>
-            {(["all", "pending", "processing", "processed", "failed"] as const).map((st) => (
-              <button
-                key={st}
-                onClick={() => {
-                  setStatusFilter(st);
-                  setCurrentPage(1);
-                }}
-                className={`px-3 py-1 text-xs font-medium rounded-lg capitalize transition-all ${
-                  statusFilter === st
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                }`}
-              >
-                {st}
-              </button>
-            ))}
+          <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sharedWithMe}
+                onChange={(e) => setSharedWithMe(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500"
+              />
+              <span>Show only documents explicitly shared with me</span>
+            </label>
+            {meta && (
+              <span>Showing {documents.length} of {meta.total_items} items</span>
+            )}
           </div>
         </div>
 
-        {/* Document Table / List */}
-        {loading ? (
-          <LoadingSpinner message="Loading document repository..." />
-        ) : error ? (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm">
-            {error}
-          </div>
-        ) : documents.length === 0 ? (
-          <EmptyState
-            title="No documents found"
-            description={
-              search || statusFilter !== "all"
-                ? "No document records match your active search or status filter."
-                : "Upload your first file to get started with document intelligence."
-            }
-          />
-        ) : (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+        {/* Documents Table */}
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 overflow-hidden shadow-xl">
+          {loading ? (
+            <div className="py-20 flex justify-center">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="p-8">
+              <EmptyState
+                title="No documents found"
+                description="Try adjusting your search criteria, or upload your first document."
+                actionLabel="Upload Document"
+                onAction={() => setIsUploadModalOpen(true)}
+              />
+            </div>
+          ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
                   <tr>
-                    <th className="px-6 py-4">File Name</th>
-                    <th className="px-6 py-4">Type</th>
-                    <th className="px-6 py-4">Size</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">OCR State</th>
-                    <th className="px-6 py-4">Uploaded</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    <th className="p-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.length === documents.length && documents.length > 0}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-800 text-blue-600"
+                      />
+                    </th>
+                    <th className="p-4">Document</th>
+                    <th className="p-4">Version</th>
+                    <th className="p-4">Confidentiality</th>
+                    <th className="p-4">Lifecycle</th>
+                    <th className="p-4">Permission</th>
+                    <th className="p-4">Created</th>
+                    <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tbody className="divide-y divide-slate-800/80">
                   {documents.map((doc) => {
-                    const canEdit = canManageAll || user?.id === doc.owner_id;
-                    const isDownloading = downloadingId === doc.id;
-                    const isOcrProcessing =
-                      doc.ocr_status === "processing" || !!processingOcrIds[doc.id];
-                    const isOcrCompleted = doc.ocr_status === "completed";
+                    const isSelected = selectedIds.includes(doc.id);
+                    const canEdit = doc.user_permission === "edit" || doc.user_permission === "manage";
+                    const canManage = doc.user_permission === "manage";
 
                     return (
                       <tr
                         key={doc.id}
-                        className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors group"
+                        className={`hover:bg-slate-800/40 transition ${
+                          isSelected ? "bg-blue-600/10" : ""
+                        }`}
                       >
-                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                          <div className="flex items-center gap-3">
-                            {renderFileIcon(doc.file_name, doc.file_type)}
-                            <div className="truncate max-w-xs">
-                              <span className="font-semibold block truncate" title={doc.file_name}>
-                                {doc.file_name}
-                              </span>
-                              <span className="text-xs text-gray-400 dark:text-gray-500">
-                                {doc.file_type || "document"}
-                              </span>
+                        <td className="p-4">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(doc.id)}
+                            className="rounded border-slate-700 bg-slate-800 text-blue-600"
+                          />
+                        </td>
+                        <td className="p-4">
+                          <div className="space-y-1">
+                            <Link
+                              href={`/documents/${doc.id}`}
+                              className="font-semibold text-slate-100 hover:text-blue-400 transition"
+                            >
+                              {doc.title || doc.file_name}
+                            </Link>
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <span>{doc.file_name}</span>
+                              {doc.category && <span>• {doc.category}</span>}
+                              {doc.file_size && (
+                                <span>• {(doc.file_size / (1024 * 1024)).toFixed(2)} MB</span>
+                              )}
                             </div>
+                            {doc.tags && doc.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {doc.tags.map((t) => (
+                                  <span
+                                    key={t}
+                                    className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400"
+                                  >
+                                    #{t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">
-                          {doc.file_name.slice(doc.file_name.lastIndexOf(".") + 1) || "DOC"}
+                        <td className="p-4">
+                          <button
+                            onClick={() => setVersionDoc(doc)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs font-mono font-semibold text-blue-400 transition"
+                            title="Click to view version history"
+                          >
+                            v{doc.current_version_number || 1}
+                            {doc.version_count > 1 && (
+                              <span className="text-[10px] text-slate-400 ml-1">
+                                ({doc.version_count})
+                              </span>
+                            )}
+                          </button>
                         </td>
-                        <td className="px-6 py-4 text-xs font-mono text-gray-500 dark:text-gray-400">
-                          {formatFileSize(doc.file_size)}
+                        <td className="p-4">{getConfidentialityBadge(doc.confidentiality)}</td>
+                        <td className="p-4">{getLifecycleBadge(doc.lifecycle_status)}</td>
+                        <td className="p-4">
+                          <span className="capitalize text-xs font-medium px-2 py-1 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+                            {doc.user_permission || "view"}
+                          </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <Badge variant={getStatusVariant(doc.status)} size="sm">
-                            {doc.status}
-                          </Badge>
+                        <td className="p-4 text-xs text-slate-400">
+                          {new Date(doc.created_at).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4">
-                          <Badge variant={getStatusVariant(doc.ocr_status)} size="sm">
-                            {doc.ocr_status}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-500 dark:text-gray-400">
-                          {new Date(doc.created_at).toLocaleDateString(undefined, {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </td>
-                        <td className="px-6 py-4 text-right space-x-1.5 shrink-0">
-                          {/* OCR Actions (Milestone 6 & 6.1) */}
-                          {isOcrCompleted ? (
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* AI Summary */}
                             <button
-                              onClick={() => setTextViewerDoc(doc)}
-                              className="px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg transition-colors inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800"
-                              title="View extracted text & chunks"
+                              onClick={() => setSummaryDoc(doc)}
+                              className="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition"
+                              title="AI Summary"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              <span>View Text</span>
-                            </button>
-                          ) : isOcrProcessing ? (
-                            <span className="px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg inline-flex items-center gap-1.5">
-                              <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                              <span>Extracting...</span>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleTriggerOCR(doc)}
-                              className="px-2.5 py-1 text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors inline-flex items-center gap-1 border border-blue-200 dark:border-blue-800"
-                              title="Trigger OCR & Text Extraction"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                               </svg>
-                              <span>Extract Text</span>
                             </button>
-                          )}
 
-                          <button
-                            onClick={() => setDetailsDoc(doc)}
-                            className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            title="View full metadata"
-                          >
-                            Details
-                          </button>
-                          <button
-                            onClick={() => handleDownload(doc)}
-                            disabled={isDownloading}
-                            className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors inline-flex items-center gap-1"
-                            title="Download file"
-                          >
-                            {isDownloading ? (
-                              <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {/* AI Chat */}
+                            <button
+                              onClick={() => setChatDoc(doc)}
+                              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition"
+                              title="AI Chat"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                              </svg>
+                            </button>
+
+                            {/* Upload New Version */}
+                            {canEdit && (
+                              <button
+                                onClick={() => setVersionDoc(doc)}
+                                className="p-1.5 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition"
+                                title="Upload New Version"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                              </button>
+                            )}
+
+                            {/* Share */}
+                            {canManage && (
+                              <button
+                                onClick={() => setShareDoc(doc)}
+                                className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
+                                title="Manage Access Grants"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                </svg>
+                              </button>
+                            )}
+
+                            {/* Download */}
+                            <button
+                              onClick={() => downloadDocument(doc.id, doc.file_name)}
+                              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
+                              title="Download File"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
-                            )}
-                            <span>Download</span>
-                          </button>
-                          {canEdit && (
-                            <>
+                            </button>
+
+                            {/* Workspace Details */}
+                            <Link
+                              href={`/documents/${doc.id}`}
+                              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition"
+                              title="Open Full Workspace"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </Link>
+
+                            {/* Archive / Restore */}
+                            {canManage && doc.lifecycle_status === "active" && (
                               <button
-                                onClick={() => {
-                                  setEditDoc(doc);
-                                  setEditFileName(doc.file_name);
-                                }}
-                                className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-blue-600 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors"
+                                onClick={() => handleArchive(doc.id)}
+                                className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition"
+                                title="Archive Document"
                               >
-                                Edit
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                                </svg>
                               </button>
+                            )}
+                            {canManage && doc.lifecycle_status === "archived" && (
+                              <button
+                                onClick={() => handleRestore(doc.id)}
+                                className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
+                                title="Restore Document"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              </button>
+                            )}
+
+                            {/* Delete */}
+                            {canManage && (
                               <button
                                 onClick={() => setDeleteDoc(doc)}
-                                className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+                                title="Delete Document"
                               >
-                                Delete
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
                               </button>
-                            </>
-                          )}
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -700,415 +569,218 @@ export default function DocumentsPage() {
                 </tbody>
               </table>
             </div>
+          )}
 
-            {/* Pagination Controls */}
-            {meta && meta.total_pages > 1 && (
-              <div className="p-4 border-t border-gray-100 dark:divide-gray-800 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                <span>
-                  Showing page {meta.page} of {meta.total_pages} ({meta.total_items} total)
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={meta.page <= 1}
-                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                    className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={meta.page >= meta.total_pages}
-                    onClick={() => setCurrentPage((p) => p + 1)}
-                    className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Upload Document Modal (Milestone 6.1) */}
-        <Modal
-          isOpen={isUploadModalOpen}
-          onClose={() => {
-            if (!uploading) {
-              setIsUploadModalOpen(false);
-              setSelectedFile(null);
-              setUploadProgress(null);
-              setUploadError(null);
-            }
-          }}
-          title="Upload Document"
-          maxWidth="lg"
-        >
-          <div className="space-y-4">
-            {/* Drag-and-Drop Area */}
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
-                isDragOver
-                  ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 scale-[0.99]"
-                  : "border-gray-300 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 bg-gray-50/50 dark:bg-gray-900/50"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <div className="flex flex-col items-center justify-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-inner">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Drag and drop file here, or{" "}
-                    <span className="text-blue-600 dark:text-blue-400 underline">browse</span>
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Select a document from your computer to store & extract
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Supported formats & max size notice */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Formats:
-                </span>
-                {["PDF", "DOCX", "XLSX", "PNG", "JPG", "JPEG"].map((fmt) => (
-                  <span
-                    key={fmt}
-                    className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono rounded text-[10px]"
-                  >
-                    {fmt}
-                  </span>
-                ))}
-              </div>
-              <span className="text-gray-400 dark:text-gray-500 font-medium">
-                Max 25 MB
-              </span>
-            </div>
-
-            {/* Selected File Card */}
-            {selectedFile && (
-              <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-between animate-fadeIn">
-                <div className="flex items-center gap-3">
-                  {renderFileIcon(selectedFile.name, selectedFile.type)}
-                  <div className="truncate max-w-xs">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatFileSize(selectedFile.size)} &bull; {selectedFile.type || "Document"}
-                    </p>
-                  </div>
-                </div>
-
+          {/* Pagination Footer */}
+          {meta && meta.total_pages > 1 && (
+            <div className="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+              <div>Page {meta.page} of {meta.total_pages}</div>
+              <div className="flex gap-2">
                 <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setUploadProgress(null);
-                    setUploadError(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  disabled={uploading}
-                  className="p-1.5 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors"
-                  title="Remove selected file"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-200"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  Previous
                 </button>
-              </div>
-            )}
-
-            {/* Upload Progress Bar */}
-            {uploadProgress !== null && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <div className="flex justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
-                  <span>Streaming file to server storage...</span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
-                  ></div>
-                </div>
-              </div>
-            )}
-
-            {/* Upload Error Alert */}
-            {uploadError && (
-              <div className="p-3 text-xs bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 rounded-xl border border-rose-200 dark:border-rose-800 flex items-center gap-2 animate-fadeIn">
-                <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>{uploadError}</span>
-              </div>
-            )}
-
-            {/* Modal Actions */}
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsUploadModalOpen(false);
-                  setSelectedFile(null);
-                  setUploadProgress(null);
-                  setUploadError(null);
-                }}
-                disabled={uploading}
-                className="px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleUploadSubmit}
-                disabled={!selectedFile || uploading}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
-              >
-                {uploading ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <span>Upload Document</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </Modal>
-
-        {/* Document Details Modal */}
-        <Modal
-          isOpen={!!detailsDoc}
-          onClose={() => setDetailsDoc(null)}
-          title="Document Metadata & OCR Verification"
-        >
-          {detailsDoc && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/60 rounded-xl">
-                {renderFileIcon(detailsDoc.file_name, detailsDoc.file_type)}
-                <div className="truncate">
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                    {detailsDoc.file_name}
-                  </h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatFileSize(detailsDoc.file_size)} &bull; {detailsDoc.file_type || "application/octet-stream"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-400 dark:text-gray-500 block mb-1">Status</span>
-                  <Badge variant={getStatusVariant(detailsDoc.status)} size="sm">
-                    {detailsDoc.status}
-                  </Badge>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-400 dark:text-gray-500 block mb-1">OCR Pipeline</span>
-                  <Badge variant={getStatusVariant(detailsDoc.ocr_status)} size="sm">
-                    {detailsDoc.ocr_status}
-                  </Badge>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-400 dark:text-gray-500 block mb-1">Created At</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {new Date(detailsDoc.created_at).toLocaleString()}
-                  </span>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-400 dark:text-gray-500 block mb-1">Owner ID</span>
-                  <span className="font-mono text-gray-700 dark:text-gray-300 truncate block" title={detailsDoc.owner_id}>
-                    {detailsDoc.owner_id}
-                  </span>
-                </div>
-              </div>
-
-              {/* SHA-256 Checksum with Copy */}
-              <div className="p-3.5 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    SHA-256 Integrity Checksum
-                  </span>
-                  {detailsDoc.checksum && (
-                    <button
-                      type="button"
-                      onClick={() => handleCopyHash(detailsDoc.checksum!)}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1"
-                    >
-                      {copiedHash ? (
-                        <span>Copied!</span>
-                      ) : (
-                        <>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          <span>Copy Hash</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-                <p className="font-mono text-xs text-gray-700 dark:text-gray-300 break-all bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700 select-all">
-                  {detailsDoc.checksum || "Checksum calculation pending"}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
-                <div className="flex items-center gap-2">
-                  {detailsDoc.ocr_status === "completed" ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const target = detailsDoc;
-                        setDetailsDoc(null);
-                        setTextViewerDoc(target);
-                      }}
-                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-xl shadow-sm transition-all flex items-center gap-1.5"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span>View Extracted Text</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerOCR(detailsDoc)}
-                      disabled={detailsDoc.ocr_status === "processing" || !!processingOcrIds[detailsDoc.id]}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium rounded-xl shadow-sm transition-all flex items-center gap-1.5"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      <span>{detailsDoc.ocr_status === "processing" || !!processingOcrIds[detailsDoc.id] ? "OCR Running..." : "Run OCR Extraction"}</span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDetailsDoc(null)}
-                    className="px-3.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl"
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownload(detailsDoc)}
-                    className="px-3.5 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    <span>Download</span>
-                  </button>
-                </div>
+                <button
+                  disabled={currentPage >= meta.total_pages}
+                  onClick={() => setCurrentPage((p) => Math.min(p + 1, meta.total_pages))}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-200"
+                >
+                  Next
+                </button>
               </div>
             </div>
           )}
-        </Modal>
+        </div>
+      </div>
 
-        {/* Extracted Text Viewer Modal (Milestone 6) */}
+      {/* Floating Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedIds={selectedIds}
+        onClearSelection={() => setSelectedIds([])}
+        onSuccess={(result) => {
+          setSuccessMessage(result.message);
+          fetchDocuments();
+        }}
+        onError={(err) => setError(err)}
+      />
+
+      {/* Upload Document Modal */}
+      <Modal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        title="Upload Document"
+      >
+        <form onSubmit={handleUploadSubmit} className="space-y-4">
+          {uploadError && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg">
+              {uploadError}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">File</label>
+            <input
+              type="file"
+              required
+              onChange={(e) => {
+                if (e.target.files?.[0]) setUploadFile(e.target.files[0]);
+              }}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Title (Optional)</label>
+            <input
+              type="text"
+              value={uploadTitle}
+              onChange={(e) => setUploadTitle(e.target.value)}
+              placeholder="e.g. Master Services Agreement 2026"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Category</label>
+              <input
+                type="text"
+                value={uploadCategory}
+                onChange={(e) => setUploadCategory(e.target.value)}
+                placeholder="e.g. Legal, Finance"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Confidentiality</label>
+              <select
+                value={uploadConfidentiality}
+                onChange={(e) => setUploadConfidentiality(e.target.value as DocumentConfidentiality)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+              >
+                <option value="public">Public</option>
+                <option value="internal">Internal</option>
+                <option value="confidential">Confidential</option>
+                <option value="restricted">Restricted</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Tags (Comma-separated)</label>
+            <input
+              type="text"
+              value={uploadTags}
+              onChange={(e) => setUploadTags(e.target.value)}
+              placeholder="e.g. 2026, agreement, legal"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+            />
+          </div>
+
+          {uploading && uploadProgress !== null && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>Uploading...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div className="bg-blue-600 h-full" style={{ width: `${uploadProgress}%` }} />
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsUploadModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 text-slate-300 text-sm rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={uploading || !uploadFile}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg flex items-center gap-2"
+            >
+              {uploading ? <LoadingSpinner size="sm" /> : "Upload"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Feature Modals */}
+      <ShareDocumentModal
+        isOpen={!!shareDoc}
+        onClose={() => setShareDoc(null)}
+        document={shareDoc}
+        onSuccess={() => {
+          setSuccessMessage("Access grants updated.");
+          fetchDocuments();
+        }}
+      />
+
+      <UploadVersionModal
+        isOpen={!!versionDoc}
+        onClose={() => setVersionDoc(null)}
+        document={versionDoc}
+        onSuccess={() => {
+          setSuccessMessage("New version uploaded.");
+          fetchDocuments();
+        }}
+      />
+
+      <DocumentAISummaryModal
+        isOpen={!!summaryDoc}
+        onClose={() => setSummaryDoc(null)}
+        document={summaryDoc}
+      />
+
+      <DocumentAIChatModal
+        isOpen={!!chatDoc}
+        onClose={() => setChatDoc(null)}
+        document={chatDoc}
+      />
+
+      {textViewerDoc && (
         <ExtractedTextViewerModal
           document={textViewerDoc}
           isOpen={!!textViewerDoc}
           onClose={() => setTextViewerDoc(null)}
         />
+      )}
 
-        {/* Edit Metadata Modal */}
-        <Modal
-          isOpen={!!editDoc}
-          onClose={() => setEditDoc(null)}
-          title="Edit Document Name"
-        >
-          <form onSubmit={handleEditSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                File Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={editFileName}
-                onChange={(e) => setEditFileName(e.target.value)}
-                className="w-full px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setEditDoc(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={actionLoading}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all disabled:opacity-50"
-              >
-                {actionLoading ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-
-        {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal */}
+      {deleteDoc && (
         <Modal
           isOpen={!!deleteDoc}
           onClose={() => setDeleteDoc(null)}
-          title="Confirm Soft-Delete"
+          title="Delete Document"
         >
           <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              Are you sure you want to delete{" "}
-              <strong className="text-gray-900 dark:text-white font-semibold">
-                &ldquo;{deleteDoc?.file_name}&rdquo;
-              </strong>
-              ?
+            <p className="text-sm text-slate-300">
+              Are you sure you want to delete <strong className="text-slate-100">{deleteDoc.title || deleteDoc.file_name}</strong>?
+              This will transition the document to deleted state while preserving version audit history.
             </p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
-              Per database retention compliance, this document will be soft-deleted. The action will be recorded in the audit trail.
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-3">
               <button
-                type="button"
                 onClick={() => setDeleteDoc(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl"
+                className="px-4 py-2 bg-slate-800 text-slate-300 text-sm rounded-lg"
               >
                 Cancel
               </button>
               <button
-                type="button"
                 onClick={handleDeleteConfirm}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg"
               >
-                {actionLoading ? "Deleting..." : "Confirm Delete"}
+                Delete Document
               </button>
             </div>
           </div>
         </Modal>
-      </div>
+      )}
     </DashboardLayout>
   );
 }

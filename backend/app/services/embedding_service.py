@@ -28,7 +28,10 @@ import logging
 import threading
 from typing import cast
 
-from sentence_transformers import SentenceTransformer  # noqa: E402
+try:
+    from sentence_transformers import SentenceTransformer  # noqa: E402
+except ImportError:
+    SentenceTransformer = None  # type: ignore[assignment, misc]
 
 from app.core.config import settings
 

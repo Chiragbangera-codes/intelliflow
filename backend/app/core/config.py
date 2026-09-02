@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
 
     # CORS — comma-separated string parsed into a list
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -92,13 +92,15 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "lax"  # Use "strict" in production
 
     # -------------------------------------------------------------------------
-    # Storage & Uploads (Milestone 5 & 6.1)
+    # Storage & Uploads (Milestone 5, 6.1 & 11)
     # -------------------------------------------------------------------------
     STORAGE_DIR: str = "/app/storage/documents"
     MAX_UPLOAD_SIZE_MB: int = 25
     MAX_UPLOAD_SIZE_BYTES: int = (
         25 * 1024 * 1024
     )  # 25 MB default, overridden if MAX_UPLOAD_SIZE_MB is provided
+    DOCUMENT_BULK_MAX_ITEMS: int = 100
+    DOCUMENT_EXPIRATION_BATCH_SIZE: int = 500
 
     # -------------------------------------------------------------------------
     # AI Assistant — Ollama LLM (Milestone 7)
@@ -205,6 +207,26 @@ class Settings(BaseSettings):
     AI_TIMING_ENABLED: bool = True
 
     # -------------------------------------------------------------------------
+    # Workflow Engine (Milestone 8)
+    # -------------------------------------------------------------------------
+    # SMTP settings for the `send_email` workflow step.
+    # When SMTP_HOST is empty the step records a controlled failure rather
+    # than crashing the Celery worker.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@intelliflow.ai"
+    SMTP_USE_TLS: bool = True
+
+    # Maximum number of steps a single workflow may contain.
+    WORKFLOW_MAX_STEPS: int = 20
+    # Maximum delay in seconds for a `delay` step (5 minutes by default).
+    WORKFLOW_MAX_DELAY_SECONDS: int = 300
+    # How long (seconds) an approve step waits before timing out.
+    WORKFLOW_APPROVE_TIMEOUT_SECONDS: int = 86400  # 24 hours
+
+    # -------------------------------------------------------------------------
     # AI Assistant — Conversation History (Milestone 7 Phase 11)
     # -------------------------------------------------------------------------
     # Maximum number of prior Q&A exchanges to fold into a follow-up query's
@@ -213,6 +235,39 @@ class Settings(BaseSettings):
     # Maximum total characters of conversation history injected into a prompt.
     # A hard cap independent of the exchange count.
     AI_MAX_HISTORY_CHARS: int = 1500
+
+    # -------------------------------------------------------------------------
+    # Rate Limiting & API Security (Milestone 12)
+    # -------------------------------------------------------------------------
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_LOGIN: int = 5  # 5 requests / min per IP
+    RATE_LIMIT_AUTH_REFRESH: int = 30  # 30 requests / min per IP
+    RATE_LIMIT_AI_CHAT: int = 20  # 20 requests / min per user/IP
+    RATE_LIMIT_DOCUMENT_UPLOAD: int = 30  # 30 requests / min per user/IP
+    RATE_LIMIT_REPORTS: int = 20  # 20 requests / min per user/IP
+    RATE_LIMIT_WORKFLOWS: int = 20  # 20 requests / min per user/IP
+    RATE_LIMIT_DEFAULT: int = 120  # 120 requests / min default
+    SECURITY_HEADERS_ENABLED: bool = True
+    HSTS_MAX_AGE_SECONDS: int = 31536000
+
+    # -------------------------------------------------------------------------
+    # Enterprise Integrations, Event Bus & Webhooks (Milestone 13)
+    # -------------------------------------------------------------------------
+    WEBHOOK_TIMEOUT_SECONDS: int = 10
+    WEBHOOK_MAX_RETRIES: int = 5
+    WEBHOOK_RETRY_BACKOFF_FACTOR: float = 2.0
+    WEBHOOK_MAX_DELIVERY_HISTORY_DAYS: int = 30
+    OUTBOX_POLL_INTERVAL_SECONDS: int = 5
+    OUTBOX_BATCH_SIZE: int = 50
+
+    # Fernet key for encrypting integration credentials in the database.
+    # In production this MUST be set to a unique value (openssl rand -base64 32).
+    # In development it falls back to JWT_SECRET_KEY — NOT acceptable in production.
+    INTEGRATION_ENCRYPTION_KEY: str = ""
+
+    # Webhook HMAC signing secret — used to generate X-IntelliFlow-Signature headers.
+    # In production this MUST be set to a unique value separate from other secrets.
+    WEBHOOK_SIGNING_SECRET: str = ""
 
     # -------------------------------------------------------------------------
     # Field validators
@@ -284,6 +339,36 @@ class Settings(BaseSettings):
                     "JWT_SECRET_KEY must be changed from the default value in production. "
                     "Generate a secure key with: openssl rand -hex 32"
                 )
+
+            # Require dedicated encryption key — never fall back to JWT secret in production
+            if not self.INTEGRATION_ENCRYPTION_KEY.strip():
+                raise ValueError(
+                    "INTEGRATION_ENCRYPTION_KEY must be set in production. "
+                    "Generate with: openssl rand -base64 32"
+                )
+
+            # Require dedicated webhook signing secret
+            if not self.WEBHOOK_SIGNING_SECRET.strip():
+                raise ValueError(
+                    "WEBHOOK_SIGNING_SECRET must be set in production. "
+                    "Generate with: openssl rand -hex 32"
+                )
+
+            # Cookies must be secure in production (requires HTTPS)
+            if not self.COOKIE_SECURE:
+                raise ValueError(
+                    "COOKIE_SECURE must be true in production. HTTPS is required."
+                )
+
+            # CORS must not allow localhost in production
+            origins = self.cors_origins_list
+            suspicious = [o for o in origins if "localhost" in o or "127.0.0.1" in o]
+            if suspicious:
+                raise ValueError(
+                    f"CORS_ORIGINS contains localhost/127.0.0.1 in production: {suspicious}. "
+                    "Set CORS_ORIGINS to your production domain(s) only."
+                )
+
         return self
 
     # -------------------------------------------------------------------------
@@ -313,3 +398,52 @@ def get_settings() -> Settings:
 
 # Module-level singleton — import this throughout the application
 settings: Settings = get_settings()
+
+
+def validate_runtime_configuration(cfg: Settings | None = None) -> list[str]:
+    """
+    Validate system settings at startup and return non-fatal configuration warnings.
+
+    In production mode, raises ValueError for any critical security violations.
+    """
+    target = cfg or settings
+    warnings: list[str] = []
+
+    # 1. JWT Secret check
+    insecure_default = "CHANGE_ME_insecure_dev_key_min_32_characters_replace_now"
+    if target.JWT_SECRET_KEY == insecure_default:
+        msg = "JWT_SECRET_KEY is using the insecure development default."
+        if target.is_production:
+            raise ValueError(f"FATAL SECURITY CONFIGURATION: {msg}")
+        warnings.append(msg)
+
+    # 2. Database URL validation
+    if not target.DATABASE_URL:
+        raise ValueError("DATABASE_URL must not be empty.")
+
+    # 3. CORS Origins check
+    if "*" in target.cors_origins_list:
+        msg = "CORS_ORIGINS contains wildcard '*' while allow_credentials is enabled."
+        if target.is_production:
+            raise ValueError(f"FATAL SECURITY CONFIGURATION: {msg}")
+        warnings.append(msg)
+
+    # 4. Storage Directory validation
+    if not target.STORAGE_DIR:
+        warnings.append("STORAGE_DIR is not configured.")
+
+    # 5. Token expiry bounds
+    if target.ACCESS_TOKEN_EXPIRE_MINUTES > 1440:  # > 24 hours
+        warnings.append("ACCESS_TOKEN_EXPIRE_MINUTES is unusually high (> 24 hours).")
+
+    # 6. Integration encryption key — warn if not set (fatal in production via model_validator)
+    if not target.INTEGRATION_ENCRYPTION_KEY.strip():
+        msg = "INTEGRATION_ENCRYPTION_KEY is not set — falling back to JWT_SECRET_KEY for Fernet encryption."
+        warnings.append(msg)
+
+    # 7. Webhook signing secret — warn if not set
+    if not target.WEBHOOK_SIGNING_SECRET.strip():
+        msg = "WEBHOOK_SIGNING_SECRET is not set — webhooks will use a derived key."
+        warnings.append(msg)
+
+    return warnings

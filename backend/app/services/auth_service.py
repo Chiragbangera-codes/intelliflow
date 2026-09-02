@@ -13,7 +13,11 @@ Architecture note:
   This service never executes SQL directly.
 """
 
+from __future__ import annotations
+
 import logging
+import uuid
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +42,8 @@ from app.schemas.auth import (
     TokenResponse,
     UserInAuthResponse,
 )
+from app.schemas.security import SecuritySeverity
+from app.services.security_audit_service import SecurityAuditService
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +70,7 @@ class AuthService:
         self._users = UserRepository(session)
         self._roles = RoleRepository(session)
         self._tokens = RefreshTokenRepository(session)
+        self._security = SecurityAuditService(session)
 
     # ------------------------------------------------------------------
     # Registration
@@ -122,7 +129,12 @@ class AuthService:
     # ------------------------------------------------------------------
     # Login
     # ------------------------------------------------------------------
-    async def login(self, data: LoginRequest) -> TokenResponse:
+    async def login(
+        self,
+        data: LoginRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> TokenResponse:
         """
         Authenticate a user and issue access + refresh tokens.
 
@@ -155,12 +167,42 @@ class AuthService:
         if user is None:
             # Perform a dummy verify to prevent timing attacks
             verify_password("dummy", "$argon2id$v=19$m=65536,t=2,p=2$dummy")
+            await self._security.log_security_event(
+                action="auth.login_failed",
+                severity=SecuritySeverity.WARNING,
+                user_id=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="failure",
+                details={"reason": "user_not_found", "email": data.email},
+            )
+            await self._session.commit()
             raise _invalid
 
         if not verify_password(data.password, user.password_hash):
+            await self._security.log_security_event(
+                action="auth.login_failed",
+                severity=SecuritySeverity.WARNING,
+                user_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="failure",
+                details={"reason": "invalid_password", "email": user.email},
+            )
+            await self._session.commit()
             raise _invalid
 
         if not user.is_active:
+            await self._security.log_security_event(
+                action="auth.login_failed",
+                severity=SecuritySeverity.WARNING,
+                user_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="failure",
+                details={"reason": "account_inactive", "status": user.status.value},
+            )
+            await self._session.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Your account has been deactivated. Please contact support.",
@@ -177,6 +219,16 @@ class AuthService:
         )
         raw_refresh, refresh_hash = create_refresh_token()
         await self._tokens.create(user_id=user.id, token_hash=refresh_hash)
+
+        await self._security.log_security_event(
+            action="auth.login_success",
+            severity=SecuritySeverity.INFO,
+            user_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+            details={"email": user.email, "role": user.role.name},
+        )
 
         await self._session.commit()
 
@@ -197,25 +249,21 @@ class AuthService:
         )
 
     # ------------------------------------------------------------------
-    # Token refresh
+    # Token refresh (Hardened with Reuse Detection)
     # ------------------------------------------------------------------
-    async def refresh_tokens(self, data: RefreshRequest) -> TokenResponse:
+    async def refresh_tokens(
+        self,
+        data: RefreshRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> TokenResponse:
         """
         Validate a refresh token and issue a new token pair (rotation).
 
-        Refresh token rotation:
-          - The presented token is immediately revoked.
-          - A new access token and refresh token are issued.
-          - If the presented token was already revoked, reject the request.
-
-        Args:
-            data: Validated refresh payload containing the raw refresh token.
-
-        Raises:
-            HTTPException 401: On any token validation failure.
-
-        Returns:
-            New access token, new refresh token, and safe user profile.
+        Refresh token rotation & Reuse Detection:
+          - If the token was previously revoked, REUSE IS DETECTED:
+            Immediately revoke all sessions for that user and log a CRITICAL security event.
+          - Otherwise, revoke the presented token and issue a new token pair.
         """
         _invalid = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -226,14 +274,61 @@ class AuthService:
         token_hash = hash_token(data.refresh_token)
         stored = await self._tokens.get_by_hash(token_hash)
 
-        if stored is None or not stored.is_valid:
+        if stored is None:
+            await self._security.log_security_event(
+                action="auth.refresh_failed",
+                severity=SecuritySeverity.WARNING,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="failure",
+                details={"reason": "token_not_found"},
+            )
+            await self._session.commit()
+            raise _invalid
+
+        # REUSE DETECTION: Presented token exists but was already revoked
+        if stored.revoked_at is not None:
+            logger.critical(
+                "SECURITY ALERT: Refresh token reuse detected for user_id=%s! Revoking all sessions.",
+                stored.user_id,
+            )
+            await self._tokens.revoke_all_for_user(stored.user_id)
+            await self._security.log_security_event(
+                action="auth.token_reuse_detected",
+                severity=SecuritySeverity.CRITICAL,
+                user_id=stored.user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="failure",
+                resource_type="refresh_tokens",
+                resource_id=stored.id,
+                details={
+                    "reason": "revoked_token_presented",
+                    "action_taken": "revoked_all_user_sessions",
+                },
+            )
+            await self._session.commit()
+            raise _invalid
+
+        # Check expiration
+        if not stored.is_valid:
+            await self._security.log_security_event(
+                action="auth.refresh_failed",
+                severity=SecuritySeverity.WARNING,
+                user_id=stored.user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="failure",
+                details={"reason": "token_expired"},
+            )
+            await self._session.commit()
             raise _invalid
 
         user = await self._users.get_by_id(stored.user_id)
         if user is None or not user.is_active:
             raise _invalid
 
-        # Rotate: revoke old, issue new
+        # Rotate: revoke old token, issue new token
         await self._tokens.revoke(stored.id)
 
         access_token = create_access_token(
@@ -242,6 +337,15 @@ class AuthService:
         )
         raw_refresh, refresh_hash = create_refresh_token()
         await self._tokens.create(user_id=user.id, token_hash=refresh_hash)
+
+        await self._security.log_security_event(
+            action="auth.token_refreshed",
+            severity=SecuritySeverity.INFO,
+            user_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+        )
 
         await self._session.commit()
 
@@ -264,22 +368,64 @@ class AuthService:
     # ------------------------------------------------------------------
     # Logout
     # ------------------------------------------------------------------
-    async def logout(self, data: LogoutRequest) -> None:
+    async def logout(
+        self,
+        data: LogoutRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
         """
         Revoke the provided refresh token server-side.
-
-        Logout is only meaningful when the server-side token record is
-        invalidated — not just when the client discards its copy.
-
-        Args:
-            data: Payload containing the raw refresh token to revoke.
         """
         token_hash = hash_token(data.refresh_token)
         stored = await self._tokens.get_by_hash(token_hash)
         if stored is not None and stored.revoked_at is None:
             await self._tokens.revoke(stored.id)
+            await self._security.log_security_event(
+                action="auth.logout",
+                severity=SecuritySeverity.INFO,
+                user_id=stored.user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="success",
+            )
             await self._session.commit()
             logger.info("Refresh token revoked: user_id=%s", stored.user_id)
+
+    # ------------------------------------------------------------------
+    # Global Session Management
+    # ------------------------------------------------------------------
+    async def revoke_all_sessions(
+        self,
+        user_id: uuid.UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> int:
+        """
+        Revoke all active refresh tokens for the given user.
+        """
+        active = await self._tokens.get_active_sessions_for_user(user_id)
+        count = len(active)
+        if count > 0:
+            await self._tokens.revoke_all_for_user(user_id)
+            await self._security.log_security_event(
+                action="auth.sessions_revoked",
+                severity=SecuritySeverity.WARNING,
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status="success",
+                details={"revoked_count": count},
+            )
+            await self._session.commit()
+            logger.info("Revoked %d sessions for user_id=%s", count, user_id)
+        return count
+
+    async def get_user_sessions(self, user_id: uuid.UUID) -> list[Any]:
+        """
+        List active sessions for the user.
+        """
+        return await self._tokens.get_active_sessions_for_user(user_id)
 
     # ------------------------------------------------------------------
     # Current user

@@ -1,0 +1,120 @@
+# =============================================================================
+# IntelliFlow AI — Production Docker Compose Override
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file OVERRIDES docker-compose.yml for production deployments:
+#   - Switches all images to production build targets (non-root, no hot-reload)
+#   - Removes source-code bind mounts
+#   - Restricts exposed ports (postgres/redis are internal-only)
+#   - Enforces production environment variables
+#   - Adds worker health check
+#   - Enables Redis password protection
+#
+# Prerequisites:
+#   - .env must have APP_ENV=production
+#   - .env must have COOKIE_SECURE=true
+#   - .env must have real JWT_SECRET_KEY (not dev default)
+#   - .env must have INTEGRATION_ENCRYPTION_KEY set
+#   - .env must have WEBHOOK_SIGNING_SECRET set
+#   - .env must have CORS_ORIGINS pointing to real production domain
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — internal only, no public port exposure
+  # ---------------------------------------------------------------------------
+  postgres:
+    # Remove the host port mapping — postgres is internal-only in production
+    ports: []
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # Redis — internal only, no public port exposure
+  # ---------------------------------------------------------------------------
+  redis:
+    # Remove the host port mapping — redis is internal-only in production
+    ports: []
+    networks:
+      - intelliflow_network
+
+  # ---------------------------------------------------------------------------
+  # Backend — production build, non-root, no reload, no source mount
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production          # ← switches from "development" to "production"
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 4
+      --no-access-log
+    volumes: []                   # ← removes source bind mount
+    environment:
+      - APP_ENV=production
+      - COOKIE_SECURE=true
+      - COOKIE_SAMESITE=strict
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker — production build, no source mount
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production          # ← switches from "development" to "production"
+    command: >
+      celery -A app.workers.celery_app worker
+      --loglevel=info
+      --concurrency=2
+    volumes: []                   # ← removes source bind mount
+    environment:
+      - APP_ENV=production
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.workers.celery_app", "inspect", "ping", "--timeout", "5"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Frontend — production build, no source mount
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production          # ← switches from "development" to "production"
+    volumes: []                   # ← removes source bind mount
+    environment:
+      - NODE_ENV=production
+      # IMPORTANT: Set this to your actual production API URL
+      # e.g., https://api.yourdomain.com/api/v1
+      # The value below is a placeholder — override in your .env
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-CHANGE_THIS_TO_YOUR_PRODUCTION_API_URL}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Ollama — restrict to internal network only in production
+  # ---------------------------------------------------------------------------
+  ollama:
+    ports: []                     # ← removes host port exposure in production
+    networks:
+      - intelliflow_network

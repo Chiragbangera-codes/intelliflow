@@ -105,3 +105,17 @@ class RefreshTokenRepository:
             )
             .values(revoked_at=datetime.now(UTC))
         )
+
+    async def get_active_sessions_for_user(self, user_id: uuid.UUID) -> list[RefreshToken]:
+        """Return all active, non-expired, unrevoked refresh tokens for a user."""
+        now = datetime.now(UTC)
+        result = await self._session.execute(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > now,
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+        return list(result.scalars().all())

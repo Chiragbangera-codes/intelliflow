@@ -690,21 +690,16 @@ SQLAlchemy ORM
 
 Database
 
-Protection
+Protection & Hardening
 
-Rate Limiting
-
-XSS
-
-SQL Injection
-
-CSRF (where applicable)
-
-Secure Headers
-
-File Validation
-
-Audit Logging
+- Refresh Token Rotation & Cascade Reuse Detection
+- Redis-Backed Sliding-Window Rate Limiting (per-IP / per-user)
+- Request Correlation ID (`X-Request-ID`) Middleware & Access Logging
+- Multi-Tier Health System (`/health/live`, `/ready`, `/details`)
+- Defensive Security Headers (HSTS, CSP, X-Frame-Options: DENY, nosniff)
+- Sensitive Credential Redaction in Security Audit Logs
+- Celery Task Worker Reliability (exponential backoff & timeouts)
+- Startup Configuration Validation
 
 15. Scalability
 
@@ -738,17 +733,17 @@ Master + Read Replicas (future)
 
 16. Error Handling
 
-Standard Response
+Standard Production Error Envelope
 
 {
   "success": false,
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "email",
-      "message": "Invalid email format"
-    }
-  ]
+  "message": "Error description",
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Error description",
+    "request_id": "8f3b2c91-...",
+    "details": null
+  }
 }
 
 HTTP Status Codes

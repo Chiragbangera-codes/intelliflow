@@ -87,11 +87,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     networks:
       - intelliflow_network
 
@@ -139,8 +139,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - intelliflow_network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.workers.celery_app", "inspect", "ping", "--timeout", "5"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # Next.js Frontend

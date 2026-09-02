@@ -16,6 +16,7 @@ Milestone 2 provides:
 import os
 import uuid
 from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -25,12 +26,33 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.core.database import Base
+from app.core.redis import SlidingWindowRateLimiter
 from app.core.security import create_access_token, hash_password
 from app.dependencies.database import get_db
 from app.main import app
 from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.role import Role
 from app.models.user import User, UserStatus
+
+
+@pytest.fixture(autouse=True)
+def mock_celery_globally():
+    """Mock Celery task dispatch across all tests to prevent socket timeout latency."""
+    with patch("app.workers.celery_app.celery_app.send_task") as m:
+        m.return_value = None
+        yield m
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limiting_globally():
+    """Disable rate limiting across general unit/integration tests to avoid throttle noise."""
+    prev = settings.RATE_LIMIT_ENABLED
+    settings.RATE_LIMIT_ENABLED = False
+    SlidingWindowRateLimiter.reset_in_memory()
+    yield
+    settings.RATE_LIMIT_ENABLED = prev
+    SlidingWindowRateLimiter.reset_in_memory()
+
 
 # ---------------------------------------------------------------------------
 # Test engine — uses DATABASE_URL or SQLite in-memory fallback for unit tests
@@ -324,5 +346,36 @@ def manager_headers(manager_user: User) -> dict[str, str]:
     access_token = create_access_token(
         subject=str(manager_user.id),
         role=manager_user.role.name if manager_user.role else "manager",
+    )
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def finance_user(db_session: AsyncSession) -> AsyncGenerator[User, None]:
+    """Create an active finance test user."""
+    finance_role_id = uuid.UUID("00000000-0000-4000-8000-000000000005")
+    unique_email = f"finance_{uuid.uuid4().hex[:8]}@example.com"
+
+    user = User(
+        email=unique_email,
+        password_hash=hash_password("FinancePass1!"),
+        first_name="Finance",
+        last_name="User",
+        role_id=finance_role_id,
+        status=UserStatus.ACTIVE,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    yield user
+
+
+@pytest.fixture(scope="function")
+def finance_headers(finance_user: User) -> dict[str, str]:
+    """Return Authorization headers for the finance test user."""
+    access_token = create_access_token(
+        subject=str(finance_user.id),
+        role=finance_user.role.name if finance_user.role else "finance",
     )
     return {"Authorization": f"Bearer {access_token}"}

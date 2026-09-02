@@ -128,15 +128,21 @@ Code	Meaning
 500	Internal Server Error
 7. Error Handling
 
-Errors must never expose:
+Errors must never expose SQL queries, stack traces, internal paths, or secrets.
+All error responses conform to the standardized error envelope:
 
-SQL queries
-Stack traces
-Server paths
-Secrets
-API keys
-
-Instead return user-friendly messages.
+```json
+{
+  "success": false,
+  "message": "Error description",
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Error description",
+    "request_id": "uuid-v4",
+    "details": null
+  }
+}
+```
 
 8. Pagination
 
@@ -175,37 +181,36 @@ Ascending
 Descending
 
 ?sort=-created_at
-11. Rate Limiting
+11. Rate Limiting (Sliding Window)
 
-Public APIs
+- Auth Login (`/api/v1/auth/login`): 5 req/min per IP
+- Auth Refresh (`/api/v1/auth/refresh`): 30 req/min per IP
+- AI Chat (`/api/v1/ai/chat`, `/api/v1/documents/*/ai/*`): 20 req/min per user
+- Document Upload (`/api/v1/documents/upload`, `/versions`): 30 req/min per user
+- Reports & Workflows (`/api/v1/reports/*`, `/workflows/*/execute`): 20 req/min per user
+- General API: 120 req/min
 
-60 requests/minute
-
-Authenticated APIs
-
-300 requests/minute
-
-Admin APIs
-
-1000 requests/minute
+Headers returned on limit: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
 
 12. Endpoint Specifications
-Health
-GET /health
+Health & Observability
+GET /health — Root Liveness Probe (`{"status": "ok"}`)
+GET /api/v1/health/live — Process Liveness Probe
+GET /api/v1/health/ready — Multi-Dependency Readiness Probe (Postgres, Redis, Celery, FAISS, Ollama)
+GET /api/v1/health/details — Deep System Diagnostics (Admin only)
 
-Purpose
+Authentication & Session Hardening
+POST /api/v1/auth/register — Create new user
+POST /api/v1/auth/login — Authenticate & issue token pair
+POST /api/v1/auth/refresh — Rotate refresh token (triggers reuse detection on replayed tokens)
+POST /api/v1/auth/logout — Revoke current refresh token
+GET /api/v1/auth/sessions — List active sessions for user
+POST /api/v1/auth/revoke-all — Revoke all active sessions for user
 
-Check API availability.
-
-Authentication
-
-No
-
-Response
-
-{
-  "status":"ok"
-}
+Security & Admin Telemetry
+GET /api/v1/admin/security/events — Filtered & paginated security event log
+GET /api/v1/admin/security/summary — 24-hour aggregate security metrics
+GET /api/v1/admin/system/metrics — System-wide telemetry & entity counts
 Authentication
 POST /auth/register
 

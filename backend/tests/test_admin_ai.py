@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -58,15 +59,48 @@ EMBED_DIM = 384
 _FAKE_VECTOR = [0.1] * EMBED_DIM
 
 
+class _FakeIndex:
+    def __init__(self, dim: int = EMBED_DIM) -> None:
+        self.ntotal = 0
+
+    def add(self, arr: Any) -> None:
+        self.ntotal += len(arr)
+
+    def search(self, arr: Any, k: int) -> tuple[Any, Any]:
+        return [], []
+
+
+class _FakeFaiss:
+    IndexFlatL2 = _FakeIndex
+
+    @staticmethod
+    def write_index(idx: Any, path: str | Path) -> None:
+        Path(path).write_bytes(b"FAISS_MOCK")
+
+    @staticmethod
+    def read_index(path: str | Path) -> _FakeIndex:
+        return _FakeIndex(EMBED_DIM)
+
+
 def _make_svc(tmp_path: Path) -> VectorStoreService:
     """Return a VectorStoreService whose on-disk paths live under tmp_path."""
     svc = VectorStoreService()
+
+    def _safe_import_faiss(self: Any) -> Any:
+        try:
+            import faiss
+
+            return faiss
+        except ImportError:
+            return _FakeFaiss()
+
     svc.__class__ = type(
         "PatchedVSS",
         (VectorStoreService,),
         {
             "_index_path": property(lambda self: tmp_path / "index.faiss"),
             "_mapping_path": property(lambda self: tmp_path / "index_mapping.json"),
+            "_import_faiss": _safe_import_faiss,
         },
     )
     return svc

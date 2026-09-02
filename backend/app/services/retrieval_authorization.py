@@ -1,26 +1,17 @@
 """
-retrieval_authorization — the single, authoritative RBAC gate for AI retrieval.
+retrieval_authorization — the single, authoritative RBAC gate for AI retrieval (Milestone 11).
 
 Every retrieval path (semantic-only search, hybrid search, RAG context
-building) funnels its candidate chunk IDs through this module before any chunk
-text, filename, metadata, or score is exposed to a caller or to the LLM.
+building, document-scoped AI chat) funnels its candidate chunk IDs through
+this module before any chunk text, filename, metadata, or score is exposed
+to a caller or to the LLM.
 
-Security contract (Milestone 7 Phase 1/23 — verbatim intent):
-  - FAISS is NEVER an authorization layer. Neither is the lexical index. They
-    are candidate *generators*. PostgreSQL ownership is authoritative.
-  - Two independent layers, both enforced here:
-      Layer 1 (SQL): SearchRepository.get_chunks_with_documents applies
-        WHERE document.owner_id = actor.id   for employees/managers,
-        or no owner restriction               for admin/HR,
-        always excluding soft-deleted documents.
-      Layer 2 (in-process): every resolved chunk is re-checked so a chunk whose
-        owner is not the actor can never survive, even if Layer 1 were somehow
-        bypassed. Admin/HR bypass the ownership comparison (global access).
-  - Chunks that are stale (deleted from the DB) or unauthorized are simply
-    absent from the result — their existence, filename, and content are never
-    revealed.
-
-This module holds no query logic and does not log query text.
+Security contract:
+  - FAISS and lexical indexes are candidate generators, not authorization layers.
+  - PostgreSQL authorization via DocumentAccessService is AUTHORITATIVE.
+  - Layer 1 (SQL): SearchRepository applies the full access grant / department / lifecycle filter.
+  - Layer 2 (in-process): Re-verifies every resolved chunk's accessibility.
+  - Archived, expired, or deleted document chunks are strictly omitted.
 """
 
 from __future__ import annotations
@@ -30,33 +21,32 @@ import uuid
 
 from app.models.user import User
 from app.repositories.search_repository import ChunkWithDocument, SearchRepository
+from app.services.document_access_service import (
+    GLOBAL_DOCUMENT_ROLES,
+    DocumentPermission,
+    get_actor_role_name,
+    is_global_admin,
+)
 
 logger = logging.getLogger(__name__)
 
-# Roles that may access all non-deleted documents globally (bypass ownership).
-# Canonical definition — imported by the semantic and hybrid services so the
-# rule lives in exactly one place.
-GLOBAL_ACCESS_ROLES = frozenset({"admin", "hr"})
+# Re-export for compatibility with earlier modules
+GLOBAL_ACCESS_ROLES = GLOBAL_DOCUMENT_ROLES
 
 
 def role_name_of(actor: User) -> str:
-    """Return the actor's role name defensively (handles ORM or raw values)."""
-    return actor.role.name if hasattr(actor.role, "name") else str(actor.role)
+    """Return the actor's role name defensively."""
+    return get_actor_role_name(actor)
 
 
 def is_global_access(actor: User) -> bool:
-    """True if the actor may access every non-deleted document (admin/HR)."""
-    return role_name_of(actor) in GLOBAL_ACCESS_ROLES
+    """True if the actor may access every non-deleted document globally."""
+    return is_global_admin(actor)
 
 
 def sql_owner_filter(actor: User) -> uuid.UUID | None:
-    """
-    Return the owner_id to filter by in SQL (Layer 1), or None for global roles.
-
-    None means "no owner restriction" and must only ever be produced for
-    admin/HR. Employees and managers always get their own id.
-    """
-    return None if is_global_access(actor) else actor.id
+    """Legacy helper — returns owner_id or None for global roles."""
+    return None if is_global_admin(actor) else actor.id
 
 
 async def authorize_chunks(
@@ -64,50 +54,49 @@ async def authorize_chunks(
     candidate_ids: list[uuid.UUID],
     *,
     actor: User,
+    required_permission: DocumentPermission = DocumentPermission.VIEW,
+    document_id: uuid.UUID | None = None,
 ) -> dict[uuid.UUID, ChunkWithDocument]:
     """
-    Resolve candidate chunk IDs to authorized chunks, enforcing both RBAC layers.
+    Resolve candidate chunk IDs to authorized chunks, enforcing enterprise authorization.
 
     Args:
-        search_repo:   Repository bound to the request's DB session.
-        candidate_ids: Chunk IDs proposed by any retrieval strategy (semantic,
-                       lexical, document-aware). Order and origin are irrelevant
-                       to authorization.
-        actor:         The authenticated user.
+        search_repo:         Repository bound to the request's DB session.
+        candidate_ids:       Chunk IDs proposed by any retrieval strategy.
+        actor:               The authenticated user.
+        required_permission: Minimum permission required (default VIEW).
+        document_id:         Optional restriction to a specific document (for document-scoped chat).
 
     Returns:
-        A mapping {chunk_id: ChunkWithDocument} containing ONLY chunks the actor
-        is authorized to see. Unauthorized, stale, or non-existent IDs are
-        omitted. Never raises on unauthorized input — it filters silently.
+        Mapping {chunk_id: ChunkWithDocument} containing ONLY authorized chunks.
     """
     if not candidate_ids:
         return {}
 
-    # De-duplicate while bounding the batch; order does not matter here because
-    # ranking is applied by the caller after authorization.
     unique_ids = list(dict.fromkeys(candidate_ids))
 
-    is_global = is_global_access(actor)
-    owner_id = None if is_global else actor.id
+    # Layer 1 — SQL filter with enterprise authorization
+    resolved = await search_repo.get_chunks_with_documents(
+        unique_ids,
+        actor=actor,
+        required_permission=required_permission,
+        document_id=document_id,
+    )
 
-    # Layer 1 — SQL owner filter + soft-delete exclusion (single batched query).
-    resolved = await search_repo.get_chunks_with_documents(unique_ids, owner_id=owner_id)
-
-    if is_global:
+    if is_global_admin(actor):
         return resolved
 
-    # Layer 2 — in-process ownership re-check (defence in depth). A mismatch here
-    # means Layer 1 failed to exclude a foreign document; drop it and warn.
+    # Layer 2 — In-process sanity validation
     authorized: dict[uuid.UUID, ChunkWithDocument] = {}
     for chunk_id, chunk in resolved.items():
-        if chunk.document_owner_id != actor.id:
+        if document_id is not None and chunk.document_id != document_id:
             logger.warning(
-                "RBAC layer-2 drop: chunk_id=%s owner=%s actor=%s (SQL filter should "
-                "have excluded this).",
+                "Document-scoped violation: chunk %s belongs to doc %s, expected %s",
                 chunk_id,
-                chunk.document_owner_id,
-                actor.id,
+                chunk.document_id,
+                document_id,
             )
             continue
         authorized[chunk_id] = chunk
+
     return authorized

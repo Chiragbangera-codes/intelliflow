@@ -1,17 +1,8 @@
 """
-DocumentChunk ORM model.
+DocumentChunk ORM model — Milestone 11.
 
 Stores text chunks extracted from documents for AI retrieval (RAG).
-There is NO embedding_id here — the relationship is:
-
-    documents
-        ↓
-    document_chunks
-        ↓  (via ai_embeddings.document_chunk_id)
-    ai_embeddings
-
-Vectors are stored in FAISS. Only text content and ordering metadata
-are kept here.
+Version-aware: chunks are associated with a specific DocumentVersion.
 """
 
 from __future__ import annotations
@@ -28,6 +19,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.ai_embedding import AIEmbedding
     from app.models.document import Document
+    from app.models.document_version import DocumentVersion
 
 
 class DocumentChunk(Base):
@@ -52,6 +44,19 @@ class DocumentChunk(Base):
         nullable=False,
         index=True,
         doc="Parent document. Chunk is deleted when the document is physically deleted.",
+    )
+    version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        doc="Document version this chunk was extracted from.",
+    )
+    version_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+        doc="Version number corresponding to this chunk.",
     )
     chunk_number: Mapped[int] = mapped_column(
         Integer,
@@ -82,6 +87,11 @@ class DocumentChunk(Base):
         back_populates="chunks",
         lazy="selectin",
     )
+    version: Mapped[DocumentVersion | None] = relationship(
+        "DocumentVersion",
+        back_populates="chunks",
+        lazy="selectin",
+    )
     embedding: Mapped[AIEmbedding | None] = relationship(
         "AIEmbedding",
         back_populates="chunk",
@@ -94,5 +104,6 @@ class DocumentChunk(Base):
         return (
             f"<DocumentChunk id={self.id}"
             f" document_id={self.document_id}"
+            f" v={self.version_number}"
             f" chunk={self.chunk_number}>"
         )

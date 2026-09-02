@@ -24,7 +24,6 @@ Validates all 20 audit requirements:
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import time
 import uuid
@@ -43,19 +42,15 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.models.ai_conversation import AIConversation
 from app.models.ai_embedding import AIEmbedding
 from app.models.document import Document, DocumentStatus, OcrStatus
 from app.models.document_chunk import DocumentChunk
-from app.models.role import Role
 from app.models.user import User, UserStatus
 from app.repositories.ai_conversation_repository import AIConversationRepository
 from app.repositories.lexical_search_repository import LexicalSearchRepository
 from app.services.embedding_service import embedding_service
 from app.services.hybrid_search_service import HybridSearchService
-from app.services.query_analyzer import extract_filename_terms
 from app.services.rag_service import RAGService
-from app.services.search_service import SearchService
 from app.services.vector_store_service import vector_store
 
 _RESULTS: list[dict[str, Any]] = []

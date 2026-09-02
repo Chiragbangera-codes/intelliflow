@@ -7,6 +7,8 @@ Follows the project-wide response convention:
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 # =============================================================================
@@ -132,3 +134,36 @@ class AIHealthResponse(BaseModel):
     success: bool = True
     message: str = "AI health retrieved."
     data: AIHealthData
+
+
+# =============================================================================
+# GET /admin/system/metrics (Milestone 12 System Observability Dashboard)
+# =============================================================================
+
+
+class SystemMetricsData(BaseModel):
+    """System-wide telemetry and operational statistics."""
+
+    status: str
+    uptime_seconds: float
+    memory_usage_mb: float
+    environment: str
+    database_status: str
+    database_latency_ms: float | None = None
+    redis_status: str
+    redis_latency_ms: float | None = None
+    celery_status: str
+    ai_status: str
+    faiss_vectors: int = 0
+    total_users_count: int = 0
+    total_documents_count: int = 0
+    total_workflows_count: int = 0
+    total_executions_count: int = 0
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SystemMetricsResponse(BaseModel):
+    """Response envelope for system telemetry metrics."""
+
+    success: bool = True
+    data: SystemMetricsData

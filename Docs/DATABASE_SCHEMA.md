@@ -424,25 +424,38 @@ Execution Time
 
 audit_logs
 
-Every important action is logged.
+Every security-sensitive action and administrative event is logged with severity and sanitized metadata.
 
 Fields
 
-User
+- id (UUID PK)
+- user_id (UUID FK -> users.id, nullable, indexed)
+- action (VARCHAR(100), indexed: auth.login_success, auth.login_failed, auth.token_reuse_detected, access.denied, etc.)
+- resource_type (VARCHAR(50), nullable)
+- resource_id (VARCHAR(100), nullable)
+- details (JSONB, sanitized & redacted)
+- ip_address (VARCHAR(45), nullable)
+- user_agent (VARCHAR(500), nullable)
+- status (VARCHAR(20): success, failure)
+- severity (VARCHAR(20), indexed: info, warning, critical)
+- created_at (TIMESTAMP WITH TIME ZONE, indexed)
 
-Action
+refresh_tokens
 
-Table
+Refresh token lifecycle tracking for rotation and token family reuse detection.
 
-Record
+Fields
 
-Old Value
-
-New Value
-
-IP Address
-
-Timestamp
+- id (UUID PK)
+- user_id (UUID FK -> users.id, indexed)
+- token_hash (VARCHAR(255), unique, indexed)
+- is_revoked (BOOLEAN, default False, indexed)
+- expires_at (TIMESTAMP WITH TIME ZONE, indexed)
+- created_at (TIMESTAMP WITH TIME ZONE)
+- revoked_at (TIMESTAMP WITH TIME ZONE, nullable)
+- replaced_by_token_id (UUID, nullable)
+- client_ip (VARCHAR(45), nullable)
+- user_agent (VARCHAR(500), nullable)
 
 settings
 

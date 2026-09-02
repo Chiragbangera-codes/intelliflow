@@ -35,6 +35,10 @@ celery_app = Celery(
     include=[
         "app.workers.ocr_tasks",
         "app.workers.ai_tasks",
+        "app.workers.workflow_tasks",  # Milestone 8 — Workflow Engine
+        "app.workers.report_tasks",  # Milestone 9 — Report Generation
+        "app.workers.document_tasks",  # Milestone 11 — Document Intelligence
+        "app.workers.event_tasks",  # Milestone 13 — Event Bus & Integrations
     ],
 )
 
@@ -51,6 +55,11 @@ celery_app.conf.update(
     # Worker configuration
     worker_prefetch_multiplier=1,  # Fair task distribution
     task_acks_late=True,  # Acknowledge after completion, not on pickup
+    task_reject_on_worker_lost=True,
+    # Task Timeouts & Reliability (Milestone 12)
+    task_soft_time_limit=300,  # 5 min soft timeout
+    task_time_limit=360,  # 6 min hard timeout
+    worker_max_tasks_per_child=100,  # Prevent memory leaks from PyTorch/FAISS
 )
 
 

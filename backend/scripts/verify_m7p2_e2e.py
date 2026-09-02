@@ -23,25 +23,24 @@ This script verifies:
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import uuid
-from datetime import UTC, datetime
 
 # Ensure project root in sys.path
 sys.path.insert(0, "/app")
 
 from sqlalchemy import select, text
+
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
+from app.models.ai_embedding import AIEmbedding
 from app.models.document import Document, DocumentStatus, OcrStatus
 from app.models.document_chunk import DocumentChunk
-from app.models.ai_embedding import AIEmbedding
-from app.models.user import User, UserStatus
 from app.models.role import Role
+from app.models.user import User, UserStatus
 from app.services.embedding_service import embedding_service
-from app.services.vector_store_service import ChunkVector, vector_store
 from app.services.search_service import SearchService
+from app.services.vector_store_service import ChunkVector, vector_store
 
 
 async def run_e2e_verification() -> None:
@@ -157,7 +156,7 @@ async def run_e2e_verification() -> None:
 
         print("[*] Adding embeddings to FAISS vector index...")
         chunk_vectors = [
-            ChunkVector(chunk_id=cid, vector=vec) for cid, vec in zip(chunk_ids, embeddings)
+            ChunkVector(chunk_id=cid, vector=vec) for cid, vec in zip(chunk_ids, embeddings, strict=False)
         ]
         vector_store.add_chunks(chunk_vectors)
         vector_store.save()
@@ -166,7 +165,7 @@ async def run_e2e_verification() -> None:
         )
 
         # Save AIEmbedding records
-        for i, (chunk, vec) in enumerate(zip(all_chunks, embeddings)):
+        for i, (chunk, vec) in enumerate(zip(all_chunks, embeddings, strict=False)):
             emb_record = AIEmbedding(
                 document_chunk_id=chunk.id,
                 embedding_model="sentence-transformers/all-MiniLM-L6-v2",

@@ -26,6 +26,11 @@ import { create } from "zustand";
 import * as authService from "@/services/auth.service";
 import type { User } from "@/types";
 
+// Notification store is imported lazily to avoid circular dependency issues.
+// Polling is started/stopped through the store's public API.
+const _getNotificationStore = () =>
+  import("@/store/notification.store").then((m) => m.useNotificationStore);
+
 interface AuthState {
   /** The currently authenticated user, or null if not authenticated. */
   user: User | null;
@@ -127,6 +132,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       sessionStorage.setItem("intelliflow_refresh_token", refreshToken);
     }
     set({ user, isAuthenticated: true });
+    // Start the notification polling loop (idempotent)
+    _getNotificationStore().then((store) => {
+      store.getState().startPolling();
+    }).catch(() => { /* non-critical */ });
   },
 
   clearAuth: () => {
@@ -134,6 +143,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       window.__intelliflow_access_token = undefined;
       sessionStorage.removeItem("intelliflow_refresh_token");
     }
+    // Stop notification polling and reset notification state
+    _getNotificationStore().then((store) => {
+      store.getState().reset();
+    }).catch(() => { /* non-critical */ });
     // Reset the idempotency guards so the next login/logout cycle can
     // re-initialize correctly (e.g. after logging out and back in).
     _initializePromise = null;

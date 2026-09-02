@@ -40,6 +40,13 @@ _PRIVILEGED_ROLES = frozenset({"admin", "hr", "manager"})
 _WRITE_PRIVILEGED_ROLES = frozenset({"admin", "hr"})
 
 
+def _get_role_name(user: User) -> str:
+    """Safely extract the role name from a User object."""
+    if user.role and hasattr(user.role, "name") and user.role.name:
+        return user.role.name.lower()
+    return str(getattr(user, "role", "employee")).lower()
+
+
 def _build_response(profile: EmployeeProfile, user: User) -> EmployeeProfileResponse:
     """
     Construct an EmployeeProfileResponse from an ORM profile and its owner user.
@@ -65,7 +72,7 @@ def _build_response(profile: EmployeeProfile, user: User) -> EmployeeProfileResp
         first_name=owner.first_name,
         last_name=owner.last_name,
         email=owner.email,
-        role=owner.role.name,
+        role=_get_role_name(owner),
     )
 
 
@@ -104,7 +111,7 @@ class EmployeeProfileService:
         """
         effective_size = min(max(page_size, 1), 100)
         offset = (max(page, 1) - 1) * effective_size
-        actor_role = actor.role.name
+        actor_role = _get_role_name(actor)
 
         if actor_role in _PRIVILEGED_ROLES:
             profiles = await self._profiles.list_active(limit=effective_size, offset=offset)
@@ -155,7 +162,7 @@ class EmployeeProfileService:
             HTTPException 403: Employee attempting to access another's profile.
             HTTPException 404: Profile not found.
         """
-        actor_role = actor.role.name
+        actor_role = _get_role_name(actor)
 
         if actor_role not in _PRIVILEGED_ROLES and actor.id != target_user_id:
             raise HTTPException(
@@ -204,7 +211,7 @@ class EmployeeProfileService:
             HTTPException 404: Target user not found.
             HTTPException 409: Profile already exists for this user.
         """
-        actor_role = actor.role.name
+        actor_role = _get_role_name(actor)
 
         # Authorization: only admin/hr or the user themselves
         if actor_role not in _WRITE_PRIVILEGED_ROLES and actor.id != target_user_id:
@@ -300,7 +307,7 @@ class EmployeeProfileService:
             HTTPException 404: Profile not found.
             HTTPException 409: Employee code already in use.
         """
-        actor_role = actor.role.name
+        actor_role = _get_role_name(actor)
 
         if actor_role not in _WRITE_PRIVILEGED_ROLES and actor.id != target_user_id:
             raise HTTPException(

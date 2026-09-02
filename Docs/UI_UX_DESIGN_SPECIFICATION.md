@@ -828,15 +828,13 @@ Upload Button
 
 ---
 
-# 27. Error States
+# 27. Error States & Production Resilience
 
-Friendly Messages
-
-Retry Button
-
-Support Link
-
-Do not expose stack traces.
+- **Global & Route Error Boundaries**: Catch uncaught runtime exceptions gracefully without breaking layout.
+- **Normalized Error Messages**: Clear enterprise error descriptions without technical stack traces.
+- **Recovery Actions**: Quick-action recovery buttons ("Reload Page", "Try Again", "Return to Dashboard").
+- **Admin Security Dashboard (`/admin/security`)**: Real-time 24h event counters, severity badges (CRITICAL, WARNING, INFO), filterable log stream, and single-click global session revocation.
+- **Admin System Observability (`/admin/system`)**: Live dependency health telemetry (PostgreSQL, Redis, Celery, AI), latency indicators, uptime meters, and 30s auto-refresh interval.
 
 ---
 

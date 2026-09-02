@@ -169,33 +169,88 @@ class TestEmbeddingService:
 # ---------------------------------------------------------------------------
 
 
+class _FakeIndex:
+    def __init__(self, dim: int = EMBED_DIM) -> None:
+        self.dim = dim
+        self.vectors: list[list[float]] = []
+
+    def add(self, arr: Any) -> None:
+        if isinstance(arr, np.ndarray):
+            self.vectors.extend(arr.tolist())
+        else:
+            self.vectors.extend(arr)
+
+    @property
+    def ntotal(self) -> int:
+        return len(self.vectors)
+
+    def search(self, query: Any, k: int) -> tuple[Any, Any]:
+        if not self.vectors:
+            return np.array([[]]), np.array([[]])
+        q = np.array(query[0], dtype=np.float32)
+        vecs = np.array(self.vectors, dtype=np.float32)
+        dists = np.sum((vecs - q) ** 2, axis=1)
+        indices = np.argsort(dists)[:k]
+        return np.array([[dists[i] for i in indices]], dtype=np.float32), np.array(
+            [indices], dtype=np.int64
+        )
+
+
+class _FakeFaiss:
+    IndexFlatL2 = _FakeIndex
+
+    @staticmethod
+    def write_index(idx: Any, path: str | Path) -> None:
+        data = json.dumps(idx.vectors if hasattr(idx, "vectors") else []).encode()
+        Path(path).write_bytes(data)
+
+    @staticmethod
+    def read_index(path: str | Path) -> _FakeIndex:
+        idx = _FakeIndex(EMBED_DIM)
+        if Path(path).exists():
+            try:
+                data = json.loads(Path(path).read_bytes())
+                idx.vectors = data
+            except Exception:
+                pass
+        return idx
+
+
 class TestVectorStoreService:
     """Tests for VectorStoreService FAISS operations."""
 
     def _svc_with_mock_faiss(self, tmp_path: Path) -> tuple[VectorStoreService, Any]:
         """Build a VectorStoreService backed by a real in-process FAISS index."""
-        import faiss  # type: ignore[import-untyped]
+        try:
+            import faiss
+        except ImportError:
+            faiss = _FakeFaiss()  # type: ignore[assignment]
 
         svc = VectorStoreService()
         svc._dimension = EMBED_DIM
-        # Point index path to tmp dir
         index_file = tmp_path / "index.faiss"
-        with patch.object(
-            type(svc), "_index_path", new_callable=lambda: property(lambda s: index_file)
-        ):
-            pass
         svc.__dict__["_index_path_override"] = index_file
         return svc, faiss
 
     def _make_svc(self, tmp_path: Path) -> VectorStoreService:
         """Return a VectorStoreService with paths inside tmp_path."""
         svc = VectorStoreService()
+
+        def _safe_import_faiss(self: Any) -> Any:
+            try:
+                import faiss
+
+                return faiss
+            except ImportError:
+                return _FakeFaiss()
+
         svc.__class__ = type(
             "PatchedVSS",
             (VectorStoreService,),
             {
                 "_index_path": property(lambda self: tmp_path / "index.faiss"),
                 "_mapping_path": property(lambda self: tmp_path / "index_mapping.json"),
+                "_import_faiss": _safe_import_faiss,
             },
         )
         return svc

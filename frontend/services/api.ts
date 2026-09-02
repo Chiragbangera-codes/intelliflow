@@ -176,6 +176,59 @@ apiClient.interceptors.response.use(
 );
 
 // ---------------------------------------------------------------------------
+// Error normalization helper
+// ---------------------------------------------------------------------------
+export interface ApiErrorEnvelope {
+  code: string;
+  message: string;
+  requestId?: string;
+  details?: unknown;
+  status?: number;
+}
+
+export function normalizeApiError(error: unknown): ApiErrorEnvelope {
+  const err = error as {
+    response?: {
+      status?: number;
+      data?: {
+        message?: string;
+        detail?: unknown;
+        error?: {
+          code?: string;
+          message?: string;
+          request_id?: string;
+          details?: unknown;
+        };
+      };
+      headers?: Record<string, string>;
+    };
+    message?: string;
+  } | null | undefined;
+
+  const resp = err?.response;
+  const data = resp?.data;
+  const errObj = data?.error;
+
+  const code = errObj?.code || `HTTP_${resp?.status || 500}`;
+  const message =
+    errObj?.message ||
+    data?.message ||
+    (typeof data?.detail === "string" ? data.detail : null) ||
+    err?.message ||
+    "An unexpected error occurred.";
+  const requestId = errObj?.request_id || resp?.headers?.["x-request-id"];
+  const details = errObj?.details || data?.detail;
+
+  return {
+    code,
+    message: typeof message === "string" ? message : "Request failed.",
+    requestId,
+    details,
+    status: resp?.status,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Type augmentation for the window object
 // ---------------------------------------------------------------------------
 declare global {
@@ -185,4 +238,5 @@ declare global {
 }
 
 export default apiClient;
+
 

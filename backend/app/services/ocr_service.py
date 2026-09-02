@@ -48,7 +48,11 @@ class OCRService:
 
     def _check_access(self, doc_owner_id: uuid.UUID, actor: User) -> None:
         """Enforce document ownership or administrative privileges."""
-        role_name = actor.role.name if hasattr(actor.role, "name") else str(actor.role)
+        role_name = (
+            actor.role.name.lower()
+            if actor.role and hasattr(actor.role, "name") and actor.role.name
+            else str(getattr(actor, "role", "employee")).lower()
+        )
         if role_name in _ADMIN_ROLES:
             return
         if doc_owner_id != actor.id:

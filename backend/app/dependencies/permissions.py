@@ -50,13 +50,18 @@ def require_role(*roles: str) -> Callable[..., Coroutine[Any, Any, User]]:
     Returns:
         A FastAPI-compatible async dependency function.
     """
-    allowed_roles = frozenset(roles)
+    allowed_roles = frozenset(r.lower() for r in roles)
 
     async def _check_role(
         current_user: User = Depends(get_current_user),
     ) -> User:
         """Inner dependency — checks role membership after authentication."""
-        if current_user.role.name not in allowed_roles:
+        role_name = (
+            current_user.role.name.lower()
+            if (current_user.role and hasattr(current_user.role, "name") and current_user.role.name)
+            else str(getattr(current_user, "role", "")).lower()
+        )
+        if role_name not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have permission to access this resource.",

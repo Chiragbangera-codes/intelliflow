@@ -32,12 +32,10 @@ No document content is printed (only metadata: counts, latencies, check names).
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any
 
 # Ensure project root is in sys.path
 _ROOT = Path(__file__).resolve().parent.parent
@@ -48,22 +46,22 @@ sys.path.insert(0, "/app")
 # Imports (inside-container paths)
 # ---------------------------------------------------------------------------
 try:
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.core.config import settings
     from app.core.database import AsyncSessionLocal
+    from app.models.ai_embedding import AIEmbedding
     from app.models.document import Document
     from app.models.document_chunk import DocumentChunk
-    from app.models.ai_embedding import AIEmbedding
-    from app.models.user import User
     from app.models.role import Role
+    from app.models.user import User
     from app.repositories.ai_conversation_repository import AIConversationRepository
+    from app.services.context_builder import build_context
     from app.services.embedding_service import embedding_service
     from app.services.hybrid_search_service import HybridSearchService
-    from app.services.context_builder import build_context
-    from app.services.vector_store_service import vector_store
     from app.services.reranker_service import reranker_service
+    from app.services.vector_store_service import vector_store
 except ImportError as e:
     print(f"[FATAL] Import error — run inside the backend container: {e}")
     sys.exit(1)

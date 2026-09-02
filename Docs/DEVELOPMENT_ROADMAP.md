@@ -319,19 +319,23 @@ All critical paths tested.
 
 ## Milestone 12
 
-Deployment
+Enterprise Security, Observability & Production Hardening
 
 Deliverables
 
-- Docker Compose
-- Production Config
-- HTTPS
-- Nginx
-- Monitoring
+- Refresh Token Rotation & Token Family Reuse Detection Cascade
+- Centralized Security Audit System & Sensitive Credential Redaction
+- Redis Sliding-Window Rate Limiter & Defensive HTTP Security Headers
+- Request Correlation Tracking (`X-Request-ID`) & Structured Access Logging
+- Multi-Tier Health & Readiness System (`/health/live`, `/health/ready`, `/health/details`)
+- Celery Worker Reliability (exponential backoff, timeouts, max retries)
+- Standardized Global JSON Error Envelope (zero secret/stack trace leakage)
+- Admin Security Dashboard (`/admin/security`) & System Health Portal (`/admin/system`)
+- Startup Runtime Configuration Validator
 
 Definition of Done
 
-Application deployed successfully.
+All security and reliability tests pass, token reuse cascade strictly enforced, zero secrets leaked in logs or error responses, frontend admin portals operational, 100% regression suite passing.
 
 ---
 

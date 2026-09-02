@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.user import User, UserStatus
 
@@ -35,7 +36,13 @@ class UserRepository:
             The User instance, or None if not found or soft-deleted.
         """
         result = await self._session.execute(
-            select(User).where(
+            select(User)
+            .options(
+                selectinload(User.role),
+                selectinload(User.department),
+                selectinload(User.employee_profile),
+            )
+            .where(
                 User.email == email,
                 User.deleted_at.is_(None),
             )
@@ -53,7 +60,13 @@ class UserRepository:
             The User instance, or None if not found or soft-deleted.
         """
         result = await self._session.execute(
-            select(User).where(
+            select(User)
+            .options(
+                selectinload(User.role),
+                selectinload(User.department),
+                selectinload(User.employee_profile),
+            )
+            .where(
                 User.id == user_id,
                 User.deleted_at.is_(None),
             )
