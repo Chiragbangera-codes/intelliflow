@@ -11,7 +11,6 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   roles?: string[];
-  /** Optional badge count displayed next to the nav item label */
   badge?: number;
 }
 
@@ -25,41 +24,11 @@ export const Sidebar: React.FC = () => {
       label: "Dashboard",
       href: "/dashboard",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Departments",
-      href: "/departments",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Employees",
-      href: "/employees",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
       ),
     },
@@ -67,13 +36,11 @@ export const Sidebar: React.FC = () => {
       label: "Documents",
       href: "/documents",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="9" y1="13" x2="15" y2="13" />
+          <line x1="9" y1="17" x2="13" y2="17" />
         </svg>
       ),
     },
@@ -81,13 +48,11 @@ export const Sidebar: React.FC = () => {
       label: "Workflows",
       href: "/workflows",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M13 10V3L4 14h7v7l9-11h-7z"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="5" cy="19" r="2" />
+          <circle cx="19" cy="19" r="2" />
+          <path d="M12 7v4M5 17l7-6M19 17l-7-6" />
         </svg>
       ),
     },
@@ -96,13 +61,10 @@ export const Sidebar: React.FC = () => {
       href: "/analytics",
       roles: ["admin", "manager", "hr", "finance"],
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
         </svg>
       ),
     },
@@ -111,13 +73,8 @@ export const Sidebar: React.FC = () => {
       href: "/predictions",
       roles: ["admin", "manager", "hr", "finance"],
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
         </svg>
       ),
     },
@@ -125,13 +82,29 @@ export const Sidebar: React.FC = () => {
       label: "Reports",
       href: "/reports",
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    {
+      label: "Departments",
+      href: "/departments",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      ),
+    },
+    {
+      label: "Employees",
+      href: "/employees",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
         </svg>
       ),
     },
@@ -140,13 +113,8 @@ export const Sidebar: React.FC = () => {
       href: "/notifications",
       badge: unreadCount,
       icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
         </svg>
       ),
     },
@@ -158,187 +126,310 @@ export const Sidebar: React.FC = () => {
     return item.roles.includes(user.role.toLowerCase());
   });
 
+  const isActive = (href: string) =>
+    pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
+
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 min-h-screen text-slate-300">
-      {/* Brand / Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-800 gap-3">
-        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-base shadow-md shadow-blue-600/30">
-          IF
+    <aside
+      style={{
+        width: "var(--sidebar-w)",
+        minWidth: "var(--sidebar-w)",
+        background: "var(--ink)",
+        borderRight: "1px solid var(--ink-70)",
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
+        minHeight: "100vh",
+      }}
+    >
+      {/* Brand */}
+      <div
+        style={{
+          height: "var(--header-h)",
+          borderBottom: "1px solid var(--ink-70)",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 16px",
+          gap: "10px",
+          flexShrink: 0,
+        }}
+      >
+        {/* Logo mark — document icon */}
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            background: "var(--accent)",
+            borderRadius: 6,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
         </div>
         <div>
-          <span className="font-bold text-white text-base tracking-tight block">IntelliFlow AI</span>
-          <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Core Platform</span>
+          <span
+            style={{
+              display: "block",
+              fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+              fontWeight: 700,
+              fontSize: 13,
+              letterSpacing: "-0.02em",
+              color: "#f1f5f9",
+              lineHeight: 1.2,
+            }}
+          >
+            IntelliFlow
+          </span>
+          <span
+            style={{
+              display: "block",
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--ink-40)",
+              lineHeight: 1,
+              marginTop: 2,
+            }}
+          >
+            Document AI
+          </span>
         </div>
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
-        <p className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-          Navigation
-        </p>
-        {visibleNavItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              {item.icon}
-              <span className="flex-1">{item.label}</span>
-              {item.badge && item.badge > 0 ? (
-                <span
-                  className="min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-rose-500 text-white text-[10px] font-bold rounded-full leading-none"
-                  aria-label={`${item.badge} unread`}
+      <nav style={{ flex: 1, padding: "20px 10px", overflowY: "auto" }}>
+        {/* Main nav */}
+        <div style={{ marginBottom: 24 }}>
+          <p style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "var(--ink-60)",
+            padding: "0 10px",
+            marginBottom: 6,
+          }}>
+            Workspace
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {visibleNavItems.slice(0, 5).map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="nav-item"
+                  style={{
+                    color: active ? "#f1f5f9" : "var(--ink-40)",
+                    background: active ? "rgb(255 255 255 / 0.06)" : "transparent",
+                    borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
+                    borderRadius: "0 6px 6px 0",
+                    paddingLeft: active ? "10px" : "12px",
+                    fontWeight: active ? 600 : 500,
+                    fontSize: 14,
+                  }}
                 >
-                  {item.badge > 99 ? "99+" : item.badge}
-                </span>
-              ) : null}
-            </Link>
-          );
-        })}
+                  <span style={{ color: active ? "#93c5fd" : "var(--ink-60)", flexShrink: 0 }}>
+                    {item.icon}
+                  </span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span
+                      style={{
+                        background: "#ef4444",
+                        color: "white",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "0 5px",
+                      }}
+                    >
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
 
-        {/* Admin Navigation Section */}
+        {/* Secondary nav */}
+        <div style={{ marginBottom: 24 }}>
+          <p style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "var(--ink-60)",
+            padding: "0 10px",
+            marginBottom: 6,
+          }}>
+            People & Docs
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {visibleNavItems.slice(5).map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="nav-item"
+                  style={{
+                    color: active ? "#f1f5f9" : "var(--ink-40)",
+                    background: active ? "rgb(255 255 255 / 0.06)" : "transparent",
+                    borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
+                    borderRadius: "0 6px 6px 0",
+                    paddingLeft: active ? "10px" : "12px",
+                    fontWeight: active ? 600 : 500,
+                    fontSize: 14,
+                  }}
+                >
+                  <span style={{ color: active ? "#93c5fd" : "var(--ink-60)", flexShrink: 0 }}>
+                    {item.icon}
+                  </span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span
+                      style={{
+                        background: "#ef4444",
+                        color: "white",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "0 5px",
+                      }}
+                    >
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Admin Section */}
         {user?.role === "admin" && (
-          <div className="pt-4 mt-4 border-t border-slate-800 space-y-1.5">
-            <p className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <div>
+            <p style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "var(--ink-60)",
+              padding: "0 10px",
+              marginBottom: 6,
+            }}>
               Administration
             </p>
-            <Link
-              href="/admin/security"
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname.startsWith("/admin/security")
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                />
-              </svg>
-              <span>Security & Audit</span>
-            </Link>
-
-            <Link
-              href="/admin/system"
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname.startsWith("/admin/system")
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
-                />
-              </svg>
-              <span>System Health</span>
-            </Link>
-
-            <Link
-              href="/admin/integrations"
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname.startsWith("/admin/integrations")
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                />
-              </svg>
-              <span>Integrations</span>
-            </Link>
-
-            <Link
-              href="/admin/webhooks"
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname.startsWith("/admin/webhooks")
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              <span>Webhooks</span>
-            </Link>
-
-            <Link
-              href="/admin/automations"
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname.startsWith("/admin/automations")
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-                />
-              </svg>
-              <span>Automations</span>
-            </Link>
-
-            <Link
-              href="/admin/events"
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname.startsWith("/admin/events")
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M4 6h16M4 10h16M4 14h16M4 18h16"
-                />
-              </svg>
-              <span>Event Activity</span>
-            </Link>
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {[
+                { href: "/admin/security", label: "Security & Audit" },
+                { href: "/admin/system", label: "System Health" },
+                { href: "/admin/integrations", label: "Integrations" },
+                { href: "/admin/webhooks", label: "Webhooks" },
+                { href: "/admin/automations", label: "Automations" },
+                { href: "/admin/events", label: "Event Activity" },
+              ].map((item) => {
+                const active = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="nav-item"
+                    style={{
+                      color: active ? "#f1f5f9" : "var(--ink-40)",
+                      background: active ? "rgb(255 255 255 / 0.06)" : "transparent",
+                      borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
+                      borderRadius: "0 6px 6px 0",
+                      paddingLeft: active ? "10px" : "12px",
+                      fontWeight: active ? 600 : 500,
+                      fontSize: 13,
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         )}
-      </div>
+      </nav>
 
-      {/* User profile footer info */}
+      {/* User Profile Footer */}
       {user && (
-        <div className="p-4 border-t border-slate-800 bg-slate-900/80">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 font-semibold text-xs">
-              {user.first_name?.[0]}
-              {user.last_name?.[0]}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">
-                {user.first_name} {user.last_name}
-              </p>
-              <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
-            </div>
+        <div
+          style={{
+            borderTop: "1px solid var(--ink-70)",
+            padding: "14px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          {/* Avatar */}
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 6,
+              background: "var(--ink-80)",
+              border: "1px solid var(--ink-70)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#94a3b8",
+              flexShrink: 0,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {user.first_name?.[0]}
+            {user.last_name?.[0]}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#cbd5e1",
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              lineHeight: 1.3,
+            }}>
+              {user.first_name} {user.last_name}
+            </p>
+            <p style={{
+              fontSize: 10,
+              color: "var(--ink-40)",
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              lineHeight: 1.3,
+              textTransform: "capitalize",
+            }}>
+              {user.role}
+            </p>
           </div>
         </div>
       )}

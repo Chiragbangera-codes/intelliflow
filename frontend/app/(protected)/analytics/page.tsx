@@ -166,14 +166,13 @@ function StatusPills({ items }: { items: { status: string; count: number }[] }) 
 }
 
 // ---------------------------------------------------------------------------
-// KPI Card
+// KPI Card — premium flat style
 // ---------------------------------------------------------------------------
 
 function KPICard({
   label,
   value,
   sub,
-  color,
 }: {
   label: string;
   value: string | number;
@@ -181,26 +180,50 @@ function KPICard({
   color: string;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm">
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center mb-3 text-white text-lg font-bold"
-        style={{ background: color }}
+    <div
+      style={{
+        padding: "20px 24px",
+        borderRight: "1px solid var(--ink-70)",
+        flex: 1,
+      }}
+    >
+      <span
+        style={{
+          display: "block",
+          fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+          fontSize: "clamp(1.5rem, 2.5vw, 2rem)",
+          fontWeight: 800,
+          letterSpacing: "-0.03em",
+          color: "#f1f5f9",
+          lineHeight: 1,
+          marginBottom: 6,
+        }}
       >
-        {String(value)[0]}
-      </div>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">
         {typeof value === "number" ? fmtNum(value) : value}
-      </p>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+      </span>
+      <span
+        style={{
+          display: "block",
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: "0.07em",
+          textTransform: "uppercase",
+          color: "var(--ink-40)",
+        }}
+      >
+        {label}
+      </span>
       {sub && (
-        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{sub}</p>
+        <span style={{ display: "block", fontSize: 11, color: "var(--ink-60)", marginTop: 3 }}>
+          {sub}
+        </span>
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Section wrapper
+// Section wrapper — editorial
 // ---------------------------------------------------------------------------
 
 function Section({
@@ -211,8 +234,24 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+    <div
+      style={{
+        background: "var(--ink-90)",
+        border: "1px solid var(--ink-70)",
+        borderRadius: 12,
+        padding: "24px",
+      }}
+    >
+      <h3
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: "0.07em",
+          textTransform: "uppercase",
+          color: "var(--ink-40)",
+          margin: "0 0 16px",
+        }}
+      >
         {title}
       </h3>
       {children}
@@ -415,21 +454,55 @@ export default function AnalyticsPage() {
   const error = errors[tab];
 
   return (
-    <DashboardLayout
-      title="Analytics"
-      description="Comprehensive data-driven insights across all platform dimensions."
-    >
-      {/* Tab bar */}
-      <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl mb-6 overflow-x-auto">
+    <DashboardLayout>
+      {/* Page header */}
+      <div style={{ marginBottom: 40 }}>
+        <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>Analytics</p>
+        <h1
+          style={{
+            fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+            fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+            fontWeight: 800,
+            letterSpacing: "-0.04em",
+            color: "#f8fafc",
+            lineHeight: 1.1,
+            margin: 0,
+          }}
+        >
+          Understand how your
+          <br />
+          <span style={{ color: "var(--ink-40)" }}>documentation moves.</span>
+        </h1>
+      </div>
+
+      {/* Premium tab bar */}
+      <div
+        style={{
+          display: "flex",
+          gap: 0,
+          borderBottom: "1px solid var(--ink-70)",
+          marginBottom: 32,
+          overflowX: "auto",
+        }}
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-              tab === t.id
-                ? "bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-sm"
-                : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-            }`}
+            style={{
+              padding: "10px 20px",
+              fontSize: 13,
+              fontWeight: tab === t.id ? 700 : 500,
+              color: tab === t.id ? "#f1f5f9" : "var(--ink-40)",
+              background: "transparent",
+              border: "none",
+              borderBottom: tab === t.id ? "2px solid var(--accent)" : "2px solid transparent",
+              marginBottom: "-1px",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "color 0.1s, border-color 0.1s",
+              letterSpacing: "-0.005em",
+            }}
           >
             {t.label}
           </button>
@@ -448,15 +521,25 @@ export default function AnalyticsPage() {
         <>
           {/* ---- Overview ---- */}
           {tab === "overview" && kpi && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                <KPICard label="Employees" value={kpi.total_employees} color="#2563EB" />
-                <KPICard label="Documents" value={kpi.total_documents} color="#10B981" />
-                <KPICard label="Active Workflows" value={kpi.active_workflows} color="#8B5CF6" />
-                <KPICard label="AI Conversations" value={kpi.total_ai_conversations} color="#F59E0B" />
-                <KPICard label="Completed Executions" value={kpi.completed_workflow_executions} color="#06B6D4" />
-                <KPICard label="Predictions Run" value={kpi.total_predictions_run} color="#EC4899" />
-                <KPICard label="Reports Generated" value={kpi.total_reports_generated} color="#EF4444" />
+            <div>
+              {/* Metric strip */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  border: "1px solid var(--ink-70)",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  marginBottom: 24,
+                }}
+              >
+                <KPICard label="Employees" value={kpi.total_employees} color="" />
+                <KPICard label="Documents" value={kpi.total_documents} color="" />
+                <KPICard label="Active Workflows" value={kpi.active_workflows} color="" />
+                <KPICard label="AI Conversations" value={kpi.total_ai_conversations} color="" />
+                <KPICard label="Completed Executions" value={kpi.completed_workflow_executions} color="" />
+                <KPICard label="Predictions Run" value={kpi.total_predictions_run} color="" />
+                <KPICard label="Reports Generated" value={kpi.total_reports_generated} color="" />
               </div>
             </div>
           )}

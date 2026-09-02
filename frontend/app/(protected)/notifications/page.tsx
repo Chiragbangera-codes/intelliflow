@@ -337,21 +337,33 @@ export default function NotificationsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-4xl mx-auto">
+      <div style={{ maxWidth: 1000 }}>
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div style={{ marginBottom: 36 }}>
+          <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>
+            Activity & Alerts
+          </p>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                Notifications
+              <h1
+                style={{
+                  fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+                  fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+                  fontWeight: 800,
+                  letterSpacing: "-0.04em",
+                  color: "#f8fafc",
+                  lineHeight: 1.1,
+                  margin: 0,
+                }}
+              >
+                Notifications &amp;
+                <br />
+                <span style={{ color: "var(--ink-40)" }}>system audit activity.</span>
               </h1>
-              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              <p style={{ marginTop: 8, fontSize: 13, color: "var(--ink-40)" }}>
                 {unreadCount > 0 ? (
                   <>
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">
-                      {unreadCount}
-                    </span>{" "}
-                    unread notification{unreadCount !== 1 ? "s" : ""}
+                    <span style={{ fontWeight: 600, color: "#93c5fd" }}>{unreadCount}</span> unread alert{unreadCount !== 1 ? "s" : ""}
                   </>
                 ) : (
                   "You're all caught up"
@@ -363,42 +375,57 @@ export default function NotificationsPage() {
               <button
                 id="mark-all-read-btn"
                 onClick={handleMarkAllRead}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm"
+                className="btn btn-primary btn-sm"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-                  />
-                </svg>
                 Mark all as read
               </button>
             )}
           </div>
 
           {/* Filter tabs */}
-          <div className="mt-5 flex gap-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl p-1 w-fit">
+          <div
+            style={{
+              display: "flex",
+              gap: 0,
+              borderBottom: "1px solid var(--ink-70)",
+              marginTop: 28,
+              overflowX: "auto",
+            }}
+          >
             {FILTER_TABS.map((tab) => (
               <button
                 key={tab.id}
                 id={`filter-${tab.id}`}
                 onClick={() => handleFilterChange(tab.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeFilter === tab.id
-                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                }`}
+                style={{
+                  padding: "10px 18px",
+                  fontSize: 13,
+                  fontWeight: activeFilter === tab.id ? 700 : 500,
+                  color: activeFilter === tab.id ? "#f1f5f9" : "var(--ink-40)",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: activeFilter === tab.id ? "2px solid var(--accent)" : "2px solid transparent",
+                  marginBottom: "-1px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.1s",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
               >
                 {tab.label}
                 {tab.id === "unread" && unreadCount > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-rose-500 text-white text-[9px] rounded-full font-bold leading-none">
+                  <span
+                    style={{
+                      background: "#ef4444",
+                      color: "white",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      padding: "1px 6px",
+                    }}
+                  >
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}

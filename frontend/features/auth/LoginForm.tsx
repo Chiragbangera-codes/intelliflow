@@ -27,10 +27,7 @@ export function LoginForm() {
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (data: LoginFormData) => {
@@ -51,7 +48,7 @@ export function LoginForm() {
         typeof err.response.data === "object" &&
         "detail" in err.response.data
       ) {
-        setServerError(String(err.response.data.detail));
+        setServerError(String((err.response as { data: { detail: unknown } }).data.detail));
       } else {
         setServerError("Invalid email or password. Please try again.");
       }
@@ -61,129 +58,141 @@ export function LoginForm() {
   };
 
   return (
-    <div className="w-full max-w-md p-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-xl transition-all">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600/10 text-blue-600 mb-4">
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M13 10V3L4 14h7v7l9-11h-7z"
-            />
-          </svg>
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+    <div style={{ width: "100%", maxWidth: 380 }}>
+      {/* Heading */}
+      <div style={{ marginBottom: 36 }}>
+        <p className="eyebrow" style={{ color: "var(--ink-40)", marginBottom: 12 }}>
           Welcome back
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Enter your credentials to access your IntelliFlow account
         </p>
+        <h2
+          style={{
+            fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+            fontSize: 28,
+            fontWeight: 800,
+            letterSpacing: "-0.03em",
+            color: "#f1f5f9",
+            lineHeight: 1.15,
+            margin: 0,
+          }}
+        >
+          Sign in to
+          <br />
+          IntelliFlow
+        </h2>
       </div>
 
+      {/* Error */}
       {serverError && (
-        <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 text-sm flex items-start space-x-3">
-          <svg
-            className="w-5 h-5 flex-shrink-0 mt-0.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "12px 14px",
+            background: "rgb(220 38 38 / 0.08)",
+            border: "1px solid rgb(220 38 38 / 0.3)",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#f87171",
+            display: "flex",
+            gap: 8,
+            alignItems: "flex-start",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span>{serverError}</span>
+          {serverError}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {/* Email */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+          <label className="input-label" htmlFor="email-input">
             Email address
           </label>
           <input
             {...register("email")}
+            id="email-input"
             type="email"
+            autoComplete="email"
             placeholder="name@company.com"
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm"
+            className="input"
           />
           {errors.email && (
-            <p className="mt-1.5 text-xs text-red-500">{errors.email.message}</p>
+            <p style={{ marginTop: 4, fontSize: 12, color: "#f87171" }}>
+              {errors.email.message}
+            </p>
           )}
         </div>
 
+        {/* Password */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Password
-            </label>
-          </div>
+          <label className="input-label" htmlFor="password-input">
+            Password
+          </label>
           <input
             {...register("password")}
+            id="password-input"
             type="password"
+            autoComplete="current-password"
             placeholder="••••••••"
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm"
+            className="input"
           />
           {errors.password && (
-            <p className="mt-1.5 text-xs text-red-500">
+            <p style={{ marginTop: 4, fontSize: 12, color: "#f87171" }}>
               {errors.password.message}
             </p>
           )}
         </div>
 
+        {/* Submit */}
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-600/20 text-white font-medium rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          className="btn btn-primary"
+          style={{ width: "100%", marginTop: 4, padding: "12px 20px", justifyContent: "center" }}
         >
           {isLoading ? (
-            <div className="flex items-center space-x-2">
-              <svg
-                className="animate-spin h-4 w-4 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              <span>Signing in...</span>
-            </div>
+            <>
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  border: "2px solid rgb(255 255 255 / 0.3)",
+                  borderTopColor: "white",
+                  borderRadius: "50%",
+                  animation: "spin 0.7s linear infinite",
+                  display: "inline-block",
+                }}
+              />
+              Signing in...
+            </>
           ) : (
-            "Sign in"
+            "Sign in →"
           )}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-        Don&apos;t have an account?{" "}
+      <p
+        style={{
+          marginTop: 24,
+          textAlign: "center",
+          fontSize: 13,
+          color: "var(--ink-40)",
+        }}
+      >
+        No account?{" "}
         <Link
           href="/register"
-          className="font-semibold text-blue-600 hover:text-blue-500 dark:text-blue-400"
+          style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
         >
-          Create an account
+          Register here
         </Link>
       </p>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

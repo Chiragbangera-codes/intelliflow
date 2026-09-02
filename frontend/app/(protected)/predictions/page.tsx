@@ -139,65 +139,90 @@ export default function PredictionsPage() {
   }
 
   return (
-    <DashboardLayout
-      title="AI Predictive Models"
-      description="Deterministic statistical forecasting and risk estimation engines."
-    >
-      <div className="space-y-8">
-        {/* Model Selection Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {MODELS.map((m) => {
-            const isSelected = selectedModel === m.id;
-            return (
-              <div
-                key={m.id}
-                onClick={() => setSelectedModel(m.id)}
-                className={`cursor-pointer p-5 rounded-2xl border transition-all ${
-                  isSelected
-                    ? "bg-blue-50/50 dark:bg-blue-950/30 border-blue-500 shadow-md ring-1 ring-blue-500"
-                    : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                    {m.badge}
-                  </span>
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      isSelected
-                        ? "border-blue-600 bg-blue-600"
-                        : "border-gray-300 dark:border-gray-600"
-                    }`}
-                  >
-                    {isSelected && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                    )}
-                  </div>
-                </div>
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1.5">
-                  {m.name}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  {m.desc}
-                </p>
-              </div>
-            );
-          })}
+    <DashboardLayout>
+      <div style={{ maxWidth: 1200 }}>
+        {/* Page Header */}
+        <div style={{ marginBottom: 40 }}>
+          <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>
+            Predictive Intelligence
+          </p>
+          <h1
+            style={{
+              fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+              fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+              color: "#f8fafc",
+              lineHeight: 1.1,
+              margin: 0,
+            }}
+          >
+            Predictive models &amp;
+            <br />
+            <span style={{ color: "var(--ink-40)" }}>forward-looking organizational forecasts.</span>
+          </h1>
         </div>
 
-        {/* Action button */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleRun}
-            disabled={running}
-            className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all disabled:opacity-50 shadow-sm"
-          >
-            {running ? "Computing Forecast..." : `Run ${MODELS.find((m) => m.id === selectedModel)?.name}`}
-          </button>
-          {error && (
-            <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>
-          )}
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+          {/* Model Selection */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            {MODELS.map((m) => {
+              const isSelected = selectedModel === m.id;
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => setSelectedModel(m.id)}
+                  style={{
+                    cursor: "pointer",
+                    padding: "20px 22px",
+                    borderRadius: 10,
+                    background: isSelected ? "rgb(31 92 246 / 0.08)" : "var(--ink-90)",
+                    border: isSelected ? "1px solid var(--accent)" : "1px solid var(--ink-70)",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <span className="badge badge-internal">{m.badge}</span>
+                    <div
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        border: isSelected ? "2px solid var(--accent)" : "2px solid var(--ink-60)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isSelected && (
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />
+                      )}
+                    </div>
+                  </div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", marginBottom: 6, letterSpacing: "-0.01em" }}>
+                    {m.name}
+                  </h3>
+                  <p style={{ fontSize: 12, color: "var(--ink-40)", lineHeight: 1.5, margin: 0 }}>
+                    {m.desc}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Action button */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button
+              onClick={handleRun}
+              disabled={running}
+              className="btn btn-primary"
+            >
+              {running ? "Computing Forecast..." : `Run ${MODELS.find((m) => m.id === selectedModel)?.name}`}
+            </button>
+            {error && (
+              <p style={{ fontSize: 12, color: "#f87171", margin: 0 }}>{error}</p>
+            )}
+          </div>
 
         {/* Active Prediction Result */}
         {activeResult && (
@@ -426,6 +451,7 @@ export default function PredictionsPage() {
           )}
         </div>
       </div>
+    </div>
     </DashboardLayout>
   );
 }

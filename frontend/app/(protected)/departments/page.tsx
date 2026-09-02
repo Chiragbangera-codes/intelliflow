@@ -17,7 +17,7 @@ import type { Department, PaginationMeta } from "@/types";
 export default function DepartmentsPage() {
   const { user } = useAuthStore();
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [_meta, setMeta] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,41 +139,54 @@ export default function DepartmentsPage() {
   };
 
   return (
-    <DashboardLayout
-      title="Departments"
-      description="Manage and inspect company departments and organizational divisions."
-    >
-      <div className="space-y-6">
-        {/* Action Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              {meta ? `${meta.total_items} Total Departments` : "Departments"}
-            </span>
-          </div>
-
-          {canManage && (
-            <button
-              onClick={() => {
-                setFormData({ name: "", description: "" });
-                setFormError(null);
-                setIsCreateOpen(true);
+    <DashboardLayout>
+      <div style={{ maxWidth: 1200 }}>
+        {/* Page Header */}
+        <div style={{ marginBottom: 40 }}>
+          <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>
+            Organization
+          </p>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <h1
+              style={{
+                fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+                fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+                fontWeight: 800,
+                letterSpacing: "-0.04em",
+                color: "#f8fafc",
+                lineHeight: 1.1,
+                margin: 0,
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-blue-600/20 transition-all"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>New Department</span>
-            </button>
-          )}
+              Departments &
+              <br />
+              <span style={{ color: "var(--ink-40)" }}>organizational divisions.</span>
+            </h1>
+
+            {canManage && (
+              <button
+                onClick={() => {
+                  setFormData({ name: "", description: "" });
+                  setFormError(null);
+                  setIsCreateOpen(true);
+                }}
+                className="btn btn-primary"
+                style={{ flexShrink: 0 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                New Department
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content table */}
         {loading ? (
-          <LoadingSpinner message="Loading departments..." />
+          <LoadingSpinner size="lg" message="Loading departments..." />
         ) : error ? (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm">
+          <div style={{ padding: "12px 16px", background: "rgb(220 38 38 / 0.08)", border: "1px solid rgb(220 38 38 / 0.2)", borderRadius: 8, fontSize: 13, color: "#f87171" }}>
             {error}
           </div>
         ) : departments.length === 0 ? (
@@ -184,46 +197,40 @@ export default function DepartmentsPage() {
             onAction={canManage ? () => setIsCreateOpen(true) : undefined}
           />
         ) : (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">
+          <div style={{ background: "var(--ink-90)", border: "1px solid var(--ink-70)", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-enterprise">
+                <thead>
                   <tr>
-                    <th className="px-6 py-4">Department Name</th>
-                    <th className="px-6 py-4">Description</th>
-                    <th className="px-6 py-4">Created At</th>
-                    {canManage && <th className="px-6 py-4 text-right">Actions</th>}
+                    <th>Department Name</th>
+                    <th>Description</th>
+                    <th>Created</th>
+                    {canManage && <th style={{ textAlign: "right" }}>Actions</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tbody>
                   {departments.map((dept) => (
-                    <tr
-                      key={dept.id}
-                      className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors"
-                    >
-                      <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
-                        {dept.name}
-                      </td>
-                      <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
-                        {dept.description || "—"}
-                      </td>
-                      <td className="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs">
-                        {new Date(dept.created_at).toLocaleDateString()}
-                      </td>
+                    <tr key={dept.id}>
+                      <td style={{ fontWeight: 600, color: "#f1f5f9" }}>{dept.name}</td>
+                      <td>{dept.description || "—"}</td>
+                      <td style={{ fontSize: 12 }}>{new Date(dept.created_at).toLocaleDateString()}</td>
                       {canManage && (
-                        <td className="px-6 py-4 text-right space-x-2">
-                          <button
-                            onClick={() => openEditModal(dept)}
-                            className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(dept)}
-                            className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
-                          >
-                            Delete
-                          </button>
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                            <button
+                              onClick={() => openEditModal(dept)}
+                              className="btn btn-ghost btn-sm"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(dept)}
+                              className="btn btn-sm"
+                              style={{ background: "transparent", border: "1px solid transparent", color: "#f87171", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>

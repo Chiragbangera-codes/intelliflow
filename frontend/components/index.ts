@@ -13,6 +13,9 @@ export { StatCard } from "./ui/StatCard";
 export { LoadingSpinner } from "./ui/LoadingSpinner";
 export { EmptyState } from "./ui/EmptyState";
 export { Modal } from "./ui/Modal";
+export { SectionHeader } from "./ui/SectionHeader";
+export { MetricStrip } from "./ui/MetricStrip";
+export { DocumentPreview } from "./ui/DocumentPreview";
 
 // AI components (Milestone 7 Phase 3)
 export { AIChat } from "./ai/AIChat";

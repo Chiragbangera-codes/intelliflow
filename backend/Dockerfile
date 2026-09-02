@@ -61,7 +61,7 @@ FROM base AS production
 
 # Create a dedicated non-root user for security
 RUN groupadd --gid 1001 appgroup \
-    && useradd --uid 1001 --gid appgroup --no-create-home appuser
+    && useradd --uid 1001 --gid appgroup --create-home appuser
 
 COPY --chown=appuser:appgroup . .
 

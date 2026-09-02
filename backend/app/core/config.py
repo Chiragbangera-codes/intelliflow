@@ -356,9 +356,7 @@ class Settings(BaseSettings):
 
             # Cookies must be secure in production (requires HTTPS)
             if not self.COOKIE_SECURE:
-                raise ValueError(
-                    "COOKIE_SECURE must be true in production. HTTPS is required."
-                )
+                raise ValueError("COOKIE_SECURE must be true in production. HTTPS is required.")
 
             # CORS must not allow localhost in production
             origins = self.cors_origins_list

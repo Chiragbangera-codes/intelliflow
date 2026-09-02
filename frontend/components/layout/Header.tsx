@@ -1,18 +1,26 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
 import { useNotificationStore } from "@/store/notification.store";
-import { Badge } from "@/components/ui/Badge";
 
 interface HeaderProps {
   title?: string;
   description?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ title, description }) => {
+const ROLE_COLORS: Record<string, string> = {
+  admin: "badge-admin",
+  hr: "badge-hr",
+  manager: "badge-manager",
+  finance: "badge-finance",
+  employee: "badge-employee",
+};
+
+export const Header: React.FC<HeaderProps> = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
 
@@ -21,97 +29,155 @@ export const Header: React.FC<HeaderProps> = ({ title, description }) => {
     router.push("/login");
   };
 
-  const handleBellClick = () => {
-    router.push("/notifications");
-  };
-
-  const getRoleVariant = (role?: string) => {
-    switch (role) {
-      case "admin":
-        return "primary";
-      case "hr":
-        return "info";
-      case "manager":
-        return "warning";
-      case "finance":
-        return "success";
-      default:
-        return "neutral";
-    }
+  // Derive page title from pathname for breadcrumb
+  const getPageLabel = () => {
+    const segments = pathname.replace(/^\//, "").split("/");
+    if (segments.length === 0 || !segments[0]) return "IntelliFlow";
+    return segments
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, " "))
+      .join(" / ");
   };
 
   return (
-    <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-8 flex items-center justify-between sticky top-0 z-10">
-      <div>
-        {title && (
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{title}</h1>
-        )}
-        {description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
-        )}
-      </div>
+    <header
+      style={{
+        height: "var(--header-h)",
+        background: "var(--ink-90)",
+        borderBottom: "1px solid var(--ink-70)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 28px",
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
+        flexShrink: 0,
+      }}
+    >
+      {/* Left: breadcrumb label */}
+      <span
+        style={{
+          fontSize: 13,
+          fontWeight: 500,
+          color: "var(--ink-40)",
+          letterSpacing: "0.01em",
+        }}
+      >
+        {getPageLabel()}
+      </span>
 
-      <div className="flex items-center gap-4">
+      {/* Right: actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {user && (
-          <div className="flex items-center gap-3">
-            <Badge variant={getRoleVariant(user.role)} size="sm">
+          <>
+            {/* Role badge */}
+            <span
+              className={`badge ${ROLE_COLORS[user.role] || "badge-employee"}`}
+            >
               {user.role}
-            </Badge>
+            </span>
 
-            {/* Notification Bell */}
+            {/* Notification bell */}
             <button
               id="notification-bell"
-              onClick={handleBellClick}
+              onClick={() => router.push("/notifications")}
               aria-label={
                 unreadCount > 0
-                  ? `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}`
+                  ? `${unreadCount} unread notifications`
                   : "Notifications"
               }
-              title="Notifications"
-              className="relative p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                position: "relative",
+                width: 32,
+                height: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                border: "none",
+                borderRadius: 6,
+                color: "var(--ink-40)",
+                cursor: "pointer",
+                transition: "background 0.1s, color 0.1s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--ink-80)";
+                e.currentTarget.style.color = "#e2e8f0";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--ink-40)";
+              }}
             >
-              {/* Bell icon */}
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.75}
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
               </svg>
-
-              {/* Unread badge — hidden at zero */}
               {unreadCount > 0 && (
                 <span
                   id="notification-badge"
-                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-rose-500 text-white text-[10px] font-bold rounded-full leading-none shadow-sm animate-pulse"
                   aria-hidden="true"
-                >
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
+                  style={{
+                    position: "absolute",
+                    top: 3,
+                    right: 3,
+                    width: 8,
+                    height: 8,
+                    background: "#ef4444",
+                    borderRadius: "50%",
+                    border: "2px solid var(--ink-90)",
+                  }}
+                />
               )}
             </button>
 
-            <div className="hidden sm:block text-right">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">
-                {user.first_name} {user.last_name}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1.5 text-xs font-medium text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 dark:border-rose-900/40 rounded-xl transition-all shadow-2xs"
+            {/* User name */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                borderLeft: "1px solid var(--ink-70)",
+                paddingLeft: 12,
+                marginLeft: 4,
+              }}
             >
-              Sign out
-            </button>
-          </div>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#94a3b8",
+                }}
+              >
+                {user.first_name} {user.last_name}
+              </span>
+
+              <button
+                onClick={handleLogout}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--ink-40)",
+                  background: "transparent",
+                  border: "1px solid var(--ink-70)",
+                  borderRadius: 5,
+                  padding: "4px 10px",
+                  cursor: "pointer",
+                  letterSpacing: "0.01em",
+                  transition: "all 0.1s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "var(--ink-80)";
+                  e.currentTarget.style.color = "#e2e8f0";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--ink-40)";
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </>
         )}
       </div>
     </header>

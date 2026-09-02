@@ -129,174 +129,196 @@ export default function ReportsPage() {
   };
 
   return (
-    <DashboardLayout
-      title="Export & Reports Generator"
-      description="Compile and export structured operational datasets in CSV, Excel, and PDF formats."
-    >
-      <div className="space-y-8">
-        {/* Request Form */}
-        <div className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm space-y-5">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-            Generate New Report
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Report Type */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                Dataset Category
-              </label>
-              <select
-                value={selectedType}
-                onChange={(e) =>
-                  setSelectedType(e.target.value as ReportTypeName)
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {REPORT_TYPES.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-gray-400">
-                {REPORT_TYPES.find((t) => t.id === selectedType)?.desc}
-              </p>
-            </div>
-
-            {/* Format Selection */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                File Format
-              </label>
-              <div className="flex gap-3">
-                {FORMATS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setSelectedFormat(f.id)}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-                      selectedFormat === f.id
-                        ? "bg-blue-50 dark:bg-blue-950/40 border-blue-500 text-blue-600 dark:text-blue-400 font-semibold"
-                        : "border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:border-gray-300"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 pt-2">
-            <button
-              onClick={handleGenerate}
-              disabled={requesting}
-              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all disabled:opacity-50 shadow-sm"
-            >
-              {requesting ? "Submitting Request..." : "Request Report Compilation"}
-            </button>
-            {successMsg && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                {successMsg}
-              </p>
-            )}
-            {error && (
-              <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>
-            )}
-          </div>
+    <DashboardLayout>
+      <div style={{ maxWidth: 1200 }}>
+        {/* Page Header */}
+        <div style={{ marginBottom: 40 }}>
+          <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>
+            Intelligence & Reports
+          </p>
+          <h1
+            style={{
+              fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+              fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+              color: "#f8fafc",
+              lineHeight: 1.1,
+              margin: 0,
+            }}
+          >
+            Exports &
+            <br />
+            <span style={{ color: "var(--ink-40)" }}>structured report datasets.</span>
+          </h1>
         </div>
 
-        {/* Report Queue / History */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-              Generated Reports &amp; Exports
-            </h3>
-            <button
-              onClick={fetchReports}
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+          {/* Request Form */}
+          <div
+            style={{
+              background: "var(--ink-90)",
+              border: "1px solid var(--ink-70)",
+              borderRadius: 12,
+              padding: "28px",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                letterSpacing: "-0.01em",
+                color: "#f1f5f9",
+                marginBottom: 20,
+              }}
             >
-              Refresh Status
-            </button>
+              Compile New Report
+            </h3>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
+              {/* Report Type */}
+              <div>
+                <label className="input-label">Dataset Category</label>
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as ReportTypeName)}
+                  className="input"
+                >
+                  {REPORT_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 11, color: "var(--ink-40)", marginTop: 6 }}>
+                  {REPORT_TYPES.find((t) => t.id === selectedType)?.desc}
+                </p>
+              </div>
+
+              {/* Format Selection */}
+              <div>
+                <label className="input-label">File Format</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {FORMATS.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setSelectedFormat(f.id)}
+                      className={selectedFormat === f.id ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm"}
+                      style={{ flex: 1 }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button
+                onClick={handleGenerate}
+                disabled={requesting}
+                className="btn btn-primary"
+              >
+                {requesting ? "Submitting Request..." : "Request Report Compilation"}
+              </button>
+              {successMsg && (
+                <p style={{ fontSize: 12, color: "#4ade80", margin: 0 }}>
+                  {successMsg}
+                </p>
+              )}
+              {error && (
+                <p style={{ fontSize: 12, color: "#f87171", margin: 0 }}>{error}</p>
+              )}
+            </div>
           </div>
 
-          {loadingList ? (
-            <LoadingSpinner message="Loading reports..." />
-          ) : reports.length === 0 ? (
-            <div className="p-8 text-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-gray-400 text-sm">
-              No reports compiled yet. Select a dataset above to generate one.
+          {/* Report Queue / History */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <h3
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: "var(--ink-40)",
+                  margin: 0,
+                }}
+              >
+                Generated Reports &amp; Exports
+              </h3>
+              <button
+                onClick={fetchReports}
+                className="btn btn-ghost btn-sm"
+              >
+                Refresh Status
+              </button>
             </div>
-          ) : (
-            <div className="overflow-x-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 dark:bg-gray-800/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">
-                      Report Dataset
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">
-                      Format
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-400">
-                      Created
-                    </th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600 dark:text-gray-400">
-                      Output
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {reports.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white capitalize">
-                        {r.report_type.replace(/_/g, " ")}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 uppercase font-mono">
-                        {r.format || "CSV"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize ${
-                            r.status === "completed"
-                              ? "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
-                              : r.status === "pending"
-                              ? "bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300"
-                              : "bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300"
-                          }`}
-                        >
-                          {r.status === "pending" && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          )}
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-400">
-                        {new Date(r.created_at).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {r.status === "completed" && r.file_path ? (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono truncate max-w-xs inline-block">
-                            {r.file_path.split("/").pop()}
-                          </span>
-                        ) : r.status === "pending" ? (
-                          <span className="text-gray-400 italic">Processing…</span>
-                        ) : (
-                          <span className="text-rose-400 italic">Failed</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+
+            {loadingList ? (
+              <LoadingSpinner size="md" message="Loading reports..." />
+            ) : reports.length === 0 ? (
+              <div style={{ padding: "40px 24px", textAlign: "center", background: "var(--ink-90)", border: "1px solid var(--ink-70)", borderRadius: 12, color: "var(--ink-40)", fontSize: 13 }}>
+                No reports compiled yet. Select a dataset above to generate one.
+              </div>
+            ) : (
+              <div style={{ background: "var(--ink-90)", border: "1px solid var(--ink-70)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="table-enterprise">
+                    <thead>
+                      <tr>
+                        <th>Report Dataset</th>
+                        <th>Format</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th style={{ textAlign: "right" }}>Output</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reports.map((r) => (
+                        <tr key={r.id}>
+                          <td style={{ fontWeight: 600, color: "#f1f5f9", textTransform: "capitalize" }}>
+                            {r.report_type.replace(/_/g, " ")}
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase" }}>
+                            {r.format || "CSV"}
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                r.status === "completed"
+                                  ? "badge-active"
+                                  : r.status === "pending"
+                                  ? "badge-draft"
+                                  : "badge-expired"
+                              }`}
+                            >
+                              {r.status}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            {new Date(r.created_at).toLocaleString()}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {r.status === "completed" && r.file_path ? (
+                              <span style={{ fontSize: 11, color: "#4ade80", fontFamily: "monospace" }}>
+                                {r.file_path.split("/").pop()}
+                              </span>
+                            ) : r.status === "pending" ? (
+                              <span style={{ color: "var(--ink-40)", fontStyle: "italic", fontSize: 11 }}>Processing…</span>
+                            ) : (
+                              <span style={{ color: "#f87171", fontStyle: "italic", fontSize: 11 }}>Failed</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </DashboardLayout>

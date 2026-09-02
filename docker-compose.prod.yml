@@ -28,7 +28,7 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     # Remove the host port mapping — postgres is internal-only in production
-    ports: []
+    ports: !reset []
     networks:
       - intelliflow_network
 
@@ -37,7 +37,7 @@ services:
   # ---------------------------------------------------------------------------
   redis:
     # Remove the host port mapping — redis is internal-only in production
-    ports: []
+    ports: !reset []
     networks:
       - intelliflow_network
 
@@ -55,11 +55,11 @@ services:
       --port 8000
       --workers 4
       --no-access-log
-    volumes: []                   # ← removes source bind mount
+    volumes: !reset []            # ← removes source bind mount
     environment:
-      - APP_ENV=production
-      - COOKIE_SECURE=true
-      - COOKIE_SAMESITE=strict
+      - APP_ENV=${APP_ENV:-production}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - COOKIE_SAMESITE=${COOKIE_SAMESITE:-strict}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
@@ -79,15 +79,17 @@ services:
       celery -A app.workers.celery_app worker
       --loglevel=info
       --concurrency=2
-    volumes: []                   # ← removes source bind mount
+    volumes: !reset []            # ← removes source bind mount
     environment:
-      - APP_ENV=production
+      - APP_ENV=${APP_ENV:-production}
     healthcheck:
       test: ["CMD", "celery", "-A", "app.workers.celery_app", "inspect", "ping", "--timeout", "5"]
       interval: 60s
       timeout: 15s
       retries: 3
       start_period: 30s
+    networks:
+      - intelliflow_network
 
   # ---------------------------------------------------------------------------
   # Frontend — production build, no source mount
@@ -97,7 +99,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: production          # ← switches from "development" to "production"
-    volumes: []                   # ← removes source bind mount
+    volumes: !reset []            # ← removes source bind mount
     environment:
       - NODE_ENV=production
       # IMPORTANT: Set this to your actual production API URL
@@ -105,7 +107,7 @@ services:
       # The value below is a placeholder — override in your .env
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-CHANGE_THIS_TO_YOUR_PRODUCTION_API_URL}
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -115,6 +117,6 @@ services:
   # Ollama — restrict to internal network only in production
   # ---------------------------------------------------------------------------
   ollama:
-    ports: []                     # ← removes host port exposure in production
+    ports: !reset []              # ← removes host port exposure in production
     networks:
       - intelliflow_network

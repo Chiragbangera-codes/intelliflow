@@ -83,23 +83,15 @@ Write-Log "Starting backup: $BackupFilename"
 Write-Log "Database: $PostgresDb @ $PostgresContainer"
 
 try {
-    # pg_dump → gzip (requires gzip in PATH or use Docker to compress)
-    $DumpCmd = "pg_dump -U $PostgresUser -d $PostgresDb --no-password --format=plain --clean --if-exists"
-    docker exec $PostgresContainer sh -c $DumpCmd | & { 
-        # Check if gzip is available
-        if (Get-Command gzip -ErrorAction SilentlyContinue) {
-            $input | gzip > $BackupPath
-        } else {
-            # Fallback: save uncompressed, rename
-            $UncompressedPath = $BackupPath -replace "\.gz$", ""
-            $input | Set-Content -Path $UncompressedPath -Encoding Byte
-            $BackupPath = $UncompressedPath
-            $BackupFilename = $BackupFilename -replace "\.gz$", ""
-            Write-Log "WARNING: gzip not found — backup saved uncompressed as $BackupFilename"
-        }
-    }
-
+    $TempContainerPath = "/tmp/${BackupFilename}"
+    $DumpCmd = "pg_dump -U $PostgresUser -d $PostgresDb --no-password --format=plain --clean --if-exists | gzip > $TempContainerPath"
+    docker exec $PostgresContainer sh -c $DumpCmd
     if ($LASTEXITCODE -ne 0) { throw "pg_dump failed with exit code $LASTEXITCODE" }
+
+    docker cp "${PostgresContainer}:${TempContainerPath}" $BackupPath
+    if ($LASTEXITCODE -ne 0) { throw "docker cp failed with exit code $LASTEXITCODE" }
+
+    docker exec $PostgresContainer rm -f $TempContainerPath
     Write-Log "Backup written: $BackupPath"
 } catch {
     Write-Err "Backup failed: $_"

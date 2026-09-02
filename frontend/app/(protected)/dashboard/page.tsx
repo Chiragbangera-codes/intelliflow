@@ -3,12 +3,17 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { StatCard } from "@/components/ui/StatCard";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { AIChat } from "@/components/ai/AIChat";
 import { useAuthStore } from "@/store/auth.store";
 import { getDashboardStats } from "@/services/dashboard.service";
 import type { DashboardStats } from "@/types";
+
+// Formats a number with locale separators
+function fmtNum(n: number | undefined | null) {
+  if (n === null || n === undefined) return "—";
+  return n.toLocaleString();
+}
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
@@ -21,9 +26,7 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         const res = await getDashboardStats();
-        if (res.success) {
-          setStats(res.data);
-        }
+        if (res.success) setStats(res.data);
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : "Failed to load dashboard stats";
         setError(errorMsg);
@@ -31,236 +34,349 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
-
     loadStats();
   }, []);
 
   return (
-    <DashboardLayout
-      title="Platform Overview"
-      description={`Welcome back, ${user?.first_name || "User"}. Here is what's happening today.`}
-    >
-      <div className="space-y-8">
-        {/* KPI Metrics */}
+    <DashboardLayout>
+      <div style={{ maxWidth: 1200 }}>
+
+        {/* ── Hero heading ── */}
+        <div style={{ marginBottom: 48 }}>
+          <p
+            className="eyebrow"
+            style={{ marginBottom: 14, color: "var(--accent)" }}
+          >
+            Document Intelligence
+          </p>
+          <h1
+            style={{
+              fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+              fontSize: "clamp(2rem, 3vw, 2.75rem)",
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+              color: "#f8fafc",
+              lineHeight: 1.1,
+              margin: 0,
+            }}
+          >
+            {user
+              ? <>Good to have you back,<br /><span style={{ color: "var(--ink-40)" }}>{user.first_name}.</span></>
+              : "Everything your organization knows."}
+          </h1>
+        </div>
+
+        {/* ── Metric Strip ── */}
         {loading ? (
-          <LoadingSpinner message="Loading dashboard statistics..." />
+          <div style={{ marginBottom: 48 }}>
+            <LoadingSpinner message="Loading workspace data..." />
+          </div>
         ) : error ? (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm">
+          <div
+            style={{
+              padding: "14px 18px",
+              background: "rgb(220 38 38 / 0.08)",
+              border: "1px solid rgb(220 38 38 / 0.2)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#f87171",
+              marginBottom: 40,
+            }}
+          >
             {error}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard
-              title="Total Departments"
-              value={stats?.total_departments ?? 0}
-              description="Active organizational divisions"
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-              }
-            />
-
-            <StatCard
-              title="Employee Profiles"
-              value={stats?.total_employees ?? 0}
-              description="Registered workforce profiles"
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                  />
-                </svg>
-              }
-            />
-
-            <StatCard
-              title={user?.role === "admin" || user?.role === "hr" ? "Total Documents" : "My Documents"}
-              value={stats?.total_documents ?? 0}
-              description={
-                user?.role === "admin" || user?.role === "hr"
-                  ? "Global document metadata index"
-                  : "Metadata records in your vault"
-              }
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              }
-            />
-
-            <StatCard
-              title="Active Workflows"
-              value={stats?.total_workflows ?? 0}
-              description={`${stats?.pending_executions ?? 0} active running/pending`}
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              }
-            />
+          <div className="metric-strip" style={{ marginBottom: 48 }}>
+            <div className="metric-strip-item">
+              <span className="metric-strip-value">{fmtNum(stats?.total_documents)}</span>
+              <span className="metric-strip-label">Documents</span>
+            </div>
+            <div className="metric-strip-item">
+              <span className="metric-strip-value">{fmtNum(stats?.total_workflows)}</span>
+              <span className="metric-strip-label">Workflows</span>
+            </div>
+            <div className="metric-strip-item">
+              <span className="metric-strip-value">{fmtNum(stats?.pending_executions)}</span>
+              <span className="metric-strip-label">Pending</span>
+            </div>
+            <div className="metric-strip-item">
+              <span className="metric-strip-value">{fmtNum(stats?.total_departments)}</span>
+              <span className="metric-strip-label">Departments</span>
+            </div>
+            <div className="metric-strip-item">
+              <span className="metric-strip-value">{fmtNum(stats?.total_employees)}</span>
+              <span className="metric-strip-label">People</span>
+            </div>
           </div>
         )}
 
-        {/* IntelliFlow AI — Milestone 7 */}
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm shrink-0">
-              <span className="text-white text-sm font-bold">✦</span>
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white">
-                IntelliFlow AI
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Ask questions about your documents — answers grounded in your authorized files only
-              </p>
-            </div>
-            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 text-[10px] font-semibold uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
-              AI Assistant
-            </span>
-          </div>
-          <AIChat defaultTopK={5} />
-        </div>
-
-        {/* Quick Navigation Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Link
-            href="/departments"
-            className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
-              Manage Departments
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
-              Organize company units, assign team members, and view departmental hierarchy.
-            </p>
-          </Link>
-
-          <Link
-            href="/employees"
-            className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 transition-colors">
-              Employee Directory
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
-              Access HR profiles, designations, contact data, and reporting lines.
-            </p>
-          </Link>
-
-          <Link
-            href="/documents"
-            className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/50 flex items-center justify-center text-cyan-600 dark:text-cyan-400 mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-cyan-600 transition-colors">
-              Document Metadata
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
-              Track uploaded files, check storage checksums, and monitor processing pipelines.
-            </p>
-          </Link>
-
-          <Link
-            href="/workflows"
-            className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-purple-600 transition-colors">
-              Workflows &amp; Automation
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
-              Design automated pipelines with approval gates, notifications, and document actions.
-            </p>
-          </Link>
-
-          <Link
-            href="/analytics"
-            className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 transition-colors">
-              Operational Analytics
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
-              7-dimensional aggregate dashboards covering financials, headcount, workflows, and AI.
-            </p>
-          </Link>
-
-          <Link
-            href="/predictions"
-            className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-amber-600 transition-colors">
-              AI Forecasts &amp; Predictions
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
-              Revenue trajectories, employee attrition risks, and customer churn probabilities.
-            </p>
-          </Link>
-        </div>
-
-        {/* Milestone Status Banner */}
-        <div className="p-6 bg-gradient-to-r from-blue-900/20 via-indigo-900/20 to-purple-900/20 border border-blue-200 dark:border-blue-900/40 rounded-2xl flex items-center justify-between">
+        {/* ── Main two-column ── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 340px",
+            gap: 40,
+            marginBottom: 48,
+            alignItems: "start",
+          }}
+        >
+          {/* Left — AI workspace */}
           <div>
-            <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-semibold uppercase tracking-wider mb-2">
-              Milestone 9 Active
-            </span>
-            <h4 className="text-base font-bold text-gray-900 dark:text-white">
-              Analytics, AI Predictions &amp; Exportable Reports
-            </h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              End-to-end analytical dashboards, deterministic forecasting engines, and asynchronous multi-format reporting with CSV, Excel, and PDF exports.
-            </p>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 20,
+              }}
+            >
+              <div>
+                <p className="eyebrow" style={{ marginBottom: 6 }}>AI Assistant</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+                    fontSize: 20,
+                    fontWeight: 700,
+                    letterSpacing: "-0.025em",
+                    color: "#f1f5f9",
+                    margin: 0,
+                  }}
+                >
+                  Ask your document library
+                </h2>
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: "#4ade80",
+                  background: "rgb(22 163 74 / 0.1)",
+                  border: "1px solid rgb(22 163 74 / 0.2)",
+                  borderRadius: 4,
+                  padding: "3px 8px",
+                }}
+              >
+                ● Live
+              </span>
+            </div>
+            <div
+              style={{
+                background: "var(--ink-80)",
+                border: "1px solid var(--ink-70)",
+                borderRadius: 12,
+                overflow: "hidden",
+              }}
+            >
+              <AIChat defaultTopK={5} />
+            </div>
+          </div>
+
+          {/* Right — Quick navigation (editorial, not cards) */}
+          <div>
+            <p className="eyebrow" style={{ marginBottom: 20 }}>Navigate</p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {[
+                {
+                  href: "/documents",
+                  label: "Documents",
+                  sub: "Library & versions",
+                  tag: fmtNum(stats?.total_documents),
+                },
+                {
+                  href: "/workflows",
+                  label: "Workflows",
+                  sub: "Automation pipelines",
+                  tag: fmtNum(stats?.total_workflows),
+                },
+                {
+                  href: "/analytics",
+                  label: "Analytics",
+                  sub: "Operational insights",
+                  tag: null,
+                  roles: ["admin", "manager", "hr", "finance"],
+                },
+                {
+                  href: "/predictions",
+                  label: "Predictions",
+                  sub: "AI forecasts",
+                  tag: null,
+                  roles: ["admin", "manager", "hr", "finance"],
+                },
+                {
+                  href: "/departments",
+                  label: "Departments",
+                  sub: "Organizational units",
+                  tag: fmtNum(stats?.total_departments),
+                },
+                {
+                  href: "/employees",
+                  label: "People",
+                  sub: "Employee directory",
+                  tag: fmtNum(stats?.total_employees),
+                },
+              ]
+                .filter((item) => {
+                  if (!item.roles) return true;
+                  if (!user?.role) return false;
+                  return item.roles.includes(user.role.toLowerCase());
+                })
+                .map((item, i, arr) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "14px 0",
+                      borderBottom: i < arr.length - 1 ? "1px solid var(--ink-70)" : "none",
+                      textDecoration: "none",
+                      transition: "color 0.1s",
+                    }}
+                    onMouseEnter={(e) => {
+                      const title = e.currentTarget.querySelector(".nav-link-title") as HTMLElement;
+                      if (title) title.style.color = "#f1f5f9";
+                    }}
+                    onMouseLeave={(e) => {
+                      const title = e.currentTarget.querySelector(".nav-link-title") as HTMLElement;
+                      if (title) title.style.color = "#94a3b8";
+                    }}
+                  >
+                    <div>
+                      <p
+                        className="nav-link-title"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#94a3b8",
+                          margin: 0,
+                          transition: "color 0.1s",
+                          letterSpacing: "-0.01em",
+                        }}
+                      >
+                        {item.label}
+                      </p>
+                      <p style={{ fontSize: 11, color: "var(--ink-60)", margin: 0 }}>
+                        {item.sub}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {item.tag && item.tag !== "—" && (
+                        <span style={{ fontSize: 12, color: "var(--ink-40)", fontWeight: 600 }}>
+                          {item.tag}
+                        </span>
+                      )}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-60)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                    </div>
+                  </Link>
+                ))}
+            </div>
           </div>
         </div>
+
+        {/* ── Document workspace links — editorial horizontal section ── */}
+        <div
+          style={{
+            borderTop: "1px solid var(--ink-70)",
+            paddingTop: 40,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              marginBottom: 24,
+            }}
+          >
+            <div>
+              <p className="eyebrow" style={{ marginBottom: 8 }}>Quick Actions</p>
+              <h2
+                style={{
+                  fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+                  fontSize: 20,
+                  fontWeight: 700,
+                  letterSpacing: "-0.025em",
+                  color: "#f1f5f9",
+                  margin: 0,
+                }}
+              >
+                Document operations
+              </h2>
+            </div>
+            <Link
+              href="/documents"
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)", textDecoration: "none" }}
+            >
+              View all documents →
+            </Link>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
+            {[
+              {
+                href: "/documents",
+                action: "Upload document",
+                desc: "Add files to your document library with automatic processing.",
+                tag: "Documents",
+              },
+              {
+                href: "/workflows",
+                action: "Create workflow",
+                desc: "Design an approval pipeline or automation for your team.",
+                tag: "Workflows",
+              },
+              {
+                href: "/reports",
+                action: "Generate report",
+                desc: "Export analytical data as PDF, CSV or Excel.",
+                tag: "Reports",
+              },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  display: "block",
+                  padding: "24px 28px",
+                  background: "var(--ink-80)",
+                  border: "1px solid var(--ink-70)",
+                  borderRadius: 0,
+                  textDecoration: "none",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgb(255 255 255 / 0.03)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "var(--ink-80)";
+                }}
+              >
+                <p className="eyebrow" style={{ marginBottom: 10 }}>{item.tag}</p>
+                <p
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: "#f1f5f9",
+                    marginBottom: 6,
+                    letterSpacing: "-0.015em",
+                  }}
+                >
+                  {item.action}
+                </p>
+                <p style={{ fontSize: 13, color: "var(--ink-40)", lineHeight: 1.5 }}>
+                  {item.desc}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
       </div>
     </DashboardLayout>
   );

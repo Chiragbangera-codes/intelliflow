@@ -18,7 +18,7 @@ import type { EmployeeProfile, PaginationMeta } from "@/types";
 export default function EmployeesPage() {
   const { user } = useAuthStore();
   const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
-  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [_meta, setMeta] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -160,49 +160,61 @@ export default function EmployeesPage() {
   };
 
   return (
-    <DashboardLayout
-      title="Employees Directory"
-      description="View and manage employee identity records and HR profiles."
-    >
-      <div className="space-y-6">
-        {/* Header Action */}
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              {meta ? `${meta.total_items} Employee Profiles` : "Profiles"}
-            </span>
-          </div>
-
-          {/* If current user doesn't have a profile yet in employee list, allow setting up own profile */}
-          {user && !employees.some((e) => e.user_id === user.id) && (
-            <button
-              onClick={() => {
-                setFormData({
-                  employee_code: "",
-                  designation: "",
-                  date_of_joining: "",
-                  salary: "",
-                  emergency_contact: "",
-                  address: "",
-                });
-                setFormError(null);
-                setIsCreateOpen(true);
+    <DashboardLayout>
+      <div style={{ maxWidth: 1200 }}>
+        {/* Page Header */}
+        <div style={{ marginBottom: 40 }}>
+          <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>
+            People & Directory
+          </p>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <h1
+              style={{
+                fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+                fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+                fontWeight: 800,
+                letterSpacing: "-0.04em",
+                color: "#f8fafc",
+                lineHeight: 1.1,
+                margin: 0,
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Setup My Profile</span>
-            </button>
-          )}
+              Employees &
+              <br />
+              <span style={{ color: "var(--ink-40)" }}>team member records.</span>
+            </h1>
+
+            {user && !employees.some((e) => e.user_id === user.id) && (
+              <button
+                onClick={() => {
+                  setFormData({
+                    employee_code: "",
+                    designation: "",
+                    date_of_joining: "",
+                    salary: "",
+                    emergency_contact: "",
+                    address: "",
+                  });
+                  setFormError(null);
+                  setIsCreateOpen(true);
+                }}
+                className="btn btn-primary"
+                style={{ flexShrink: 0 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Setup My Profile
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}
         {loading ? (
-          <LoadingSpinner message="Loading employee directory..." />
+          <LoadingSpinner size="lg" message="Loading employee directory..." />
         ) : error ? (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm">
+          <div style={{ padding: "12px 16px", background: "rgb(220 38 38 / 0.08)", border: "1px solid rgb(220 38 38 / 0.2)", borderRadius: 8, fontSize: 13, color: "#f87171" }}>
             {error}
           </div>
         ) : employees.length === 0 ? (
@@ -213,70 +225,85 @@ export default function EmployeesPage() {
             onAction={user ? () => setIsCreateOpen(true) : undefined}
           />
         ) : (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">
+          <div style={{ background: "var(--ink-90)", border: "1px solid var(--ink-70)", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-enterprise">
+                <thead>
                   <tr>
-                    <th className="px-6 py-4">Employee</th>
-                    <th className="px-6 py-4">Code</th>
-                    <th className="px-6 py-4">Designation</th>
-                    <th className="px-6 py-4">Role</th>
-                    <th className="px-6 py-4">Start Date</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Designation</th>
+                    <th>Role</th>
+                    <th>Start Date</th>
+                    <th style={{ textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tbody>
                   {employees.map((emp) => {
                     const canEditThis = canManageAll || user?.id === emp.user_id;
                     return (
-                      <tr
-                        key={emp.id}
-                        className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors"
-                      >
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold text-xs flex items-center justify-center">
+                      <tr key={emp.id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                background: "var(--ink-80)",
+                                border: "1px solid var(--ink-70)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "#93c5fd",
+                              }}
+                            >
                               {emp.first_name?.[0]}
                               {emp.last_name?.[0]}
                             </div>
                             <div>
-                              <p className="font-semibold text-gray-900 dark:text-white">
+                              <p style={{ fontWeight: 600, color: "#f1f5f9", margin: 0, fontSize: 13 }}>
                                 {emp.first_name} {emp.last_name}
                               </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{emp.email}</p>
+                              <p style={{ fontSize: 11, color: "var(--ink-40)", margin: 0 }}>
+                                {emp.email}
+                              </p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-mono text-xs text-gray-600 dark:text-gray-300">
+                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>
                           {emp.employee_code || "—"}
                         </td>
-                        <td className="px-6 py-4 text-gray-600 dark:text-gray-300 font-medium">
+                        <td style={{ color: "#cbd5e1" }}>
                           {emp.designation || "—"}
                         </td>
-                        <td className="px-6 py-4">
+                        <td>
                           <Badge variant="primary" size="sm">
                             {emp.role}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 text-xs text-gray-500 dark:text-gray-400">
+                        <td style={{ fontSize: 12 }}>
                           {emp.date_of_joining ? String(emp.date_of_joining) : "—"}
                         </td>
-                        <td className="px-6 py-4 text-right space-x-2">
-                          <button
-                            onClick={() => openViewModal(emp)}
-                            className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                          >
-                            View
-                          </button>
-                          {canEditThis && (
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
                             <button
-                              onClick={() => openEditModal(emp)}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors"
+                              onClick={() => openViewModal(emp)}
+                              className="btn btn-ghost btn-sm"
                             >
-                              Edit
+                              View
                             </button>
-                          )}
+                            {canEditThis && (
+                              <button
+                                onClick={() => openEditModal(emp)}
+                                className="btn btn-ghost btn-sm"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

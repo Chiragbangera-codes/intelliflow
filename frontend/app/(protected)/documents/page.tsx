@@ -6,7 +6,6 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
-import { Badge } from "@/components/ui/Badge";
 import { ExtractedTextViewerModal } from "@/components/documents/ExtractedTextViewerModal";
 import { ShareDocumentModal } from "@/components/documents/ShareDocumentModal";
 import { UploadVersionModal } from "@/components/documents/UploadVersionModal";
@@ -30,6 +29,417 @@ import type {
   PaginationMeta,
 } from "@/types";
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function formatFileSize(bytes?: number | null): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffH = Math.floor(diffMs / (1000 * 60 * 60));
+  if (diffH < 1) return "Just now";
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function getFileTypeLabel(filename: string): string {
+  const ext = filename.split(".").pop()?.toUpperCase() || "DOC";
+  return ext;
+}
+
+// ─── Document Row Component ──────────────────────────────────────────────────
+
+interface DocRowProps {
+  doc: EnterpriseDocument;
+  isSelected: boolean;
+  onToggle: () => void;
+  onSummary: () => void;
+  onChat: () => void;
+  onVersion: () => void;
+  onShare: () => void;
+  onDownload: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
+}
+
+const DocRow: React.FC<DocRowProps> = ({
+  doc,
+  isSelected,
+  onToggle,
+  onSummary,
+  onChat,
+  onVersion,
+  onShare,
+  onDownload,
+  onArchive,
+  onRestore,
+  onDelete,
+}) => {
+  const [hovered, setHovered] = React.useState(false);
+  const canEdit = doc.user_permission === "edit" || doc.user_permission === "manage";
+  const canManage = doc.user_permission === "manage";
+  const fileType = getFileTypeLabel(doc.file_name);
+
+  const lifecycleClass =
+    doc.lifecycle_status === "active" ? "badge-active"
+    : doc.lifecycle_status === "draft" ? "badge-draft"
+    : doc.lifecycle_status === "archived" ? "badge-archived"
+    : doc.lifecycle_status === "expired" ? "badge-expired"
+    : "badge-deleted";
+
+  const confClass =
+    doc.confidentiality === "public" ? "badge-public"
+    : doc.confidentiality === "internal" ? "badge-internal"
+    : doc.confidentiality === "confidential" ? "badge-confidential"
+    : "badge-restricted";
+
+  return (
+    <tr
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: isSelected
+          ? "rgb(31 92 246 / 0.06)"
+          : hovered
+          ? "rgb(255 255 255 / 0.02)"
+          : "transparent",
+        transition: "background 0.1s",
+      }}
+    >
+      {/* Checkbox */}
+      <td style={{ padding: "14px 16px", width: 40 }}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggle}
+          style={{
+            width: 14,
+            height: 14,
+            accentColor: "var(--accent)",
+            cursor: "pointer",
+          }}
+        />
+      </td>
+
+      {/* Document — primary column */}
+      <td style={{ padding: "14px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Document artifact thumbnail */}
+          <div
+            style={{
+              width: 36,
+              height: 46,
+              background: "var(--ink-80)",
+              border: "1px solid var(--ink-70)",
+              borderRadius: 6,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              padding: "6px 5px",
+              flexShrink: 0,
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            {/* Folded corner */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: 9,
+                height: 9,
+                background: "var(--ink-90)",
+                borderBottomLeftRadius: 3,
+                borderLeft: "1px solid var(--ink-70)",
+                borderBottom: "1px solid var(--ink-70)",
+              }}
+            />
+            {/* Content lines */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 3 }}>
+              <div style={{ height: 2, background: "var(--ink-60)", borderRadius: 1, width: "60%" }} />
+              <div style={{ height: 2, background: "var(--ink-70)", borderRadius: 1, width: "85%" }} />
+              <div style={{ height: 2, background: "var(--ink-70)", borderRadius: 1, width: "70%" }} />
+            </div>
+            {/* Extension tag */}
+            <span
+              style={{
+                fontSize: 8,
+                fontWeight: 800,
+                color: "#93c5fd",
+                letterSpacing: "0.04em",
+                lineHeight: 1,
+                fontFamily: "monospace",
+                textTransform: "uppercase",
+              }}
+            >
+              {fileType.slice(0, 4)}
+            </span>
+          </div>
+
+          {/* Title + meta */}
+          <div style={{ minWidth: 0 }}>
+            <Link
+              href={`/documents/${doc.id}`}
+              style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#e2e8f0",
+                textDecoration: "none",
+                letterSpacing: "-0.01em",
+                lineHeight: 1.3,
+                marginBottom: 3,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: 260,
+                transition: "color 0.1s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#93c5fd"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#e2e8f0"; }}
+            >
+              {doc.title || doc.file_name}
+            </Link>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: "var(--ink-40)" }}>{doc.file_name}</span>
+              {doc.category && (
+                <span style={{ fontSize: 11, color: "var(--ink-60)" }}>· {doc.category}</span>
+              )}
+              {doc.file_size && (
+                <span style={{ fontSize: 11, color: "var(--ink-60)" }}>· {formatFileSize(doc.file_size)}</span>
+              )}
+            </div>
+            {doc.tags && doc.tags.length > 0 && (
+              <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                {doc.tags.slice(0, 3).map((t) => (
+                  <span
+                    key={t}
+                    style={{
+                      fontSize: 10,
+                      padding: "1px 6px",
+                      background: "var(--ink-80)",
+                      border: "1px solid var(--ink-70)",
+                      borderRadius: 3,
+                      color: "var(--ink-40)",
+                    }}
+                  >
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+
+      {/* Version */}
+      <td style={{ padding: "14px 16px" }}>
+        <button
+          onClick={onVersion}
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "var(--ink-40)",
+            background: "var(--ink-80)",
+            border: "1px solid var(--ink-70)",
+            borderRadius: 4,
+            padding: "3px 8px",
+            cursor: "pointer",
+            fontFamily: "monospace",
+            letterSpacing: "0.02em",
+            transition: "all 0.1s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "var(--accent)";
+            e.currentTarget.style.color = "#93c5fd";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--ink-70)";
+            e.currentTarget.style.color = "var(--ink-40)";
+          }}
+          title="View version history"
+        >
+          v{doc.current_version_number || 1}
+          {doc.version_count > 1 && (
+            <span style={{ fontSize: 9, color: "var(--ink-60)", marginLeft: 3 }}>
+              /{doc.version_count}
+            </span>
+          )}
+        </button>
+      </td>
+
+      {/* Confidentiality */}
+      <td style={{ padding: "14px 16px" }}>
+        <span className={`badge ${confClass}`}>{doc.confidentiality}</span>
+      </td>
+
+      {/* Status */}
+      <td style={{ padding: "14px 16px" }}>
+        <span className={`badge ${lifecycleClass}`}>{doc.lifecycle_status}</span>
+      </td>
+
+      {/* Permission */}
+      <td style={{ padding: "14px 16px" }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--ink-40)",
+            textTransform: "capitalize",
+            letterSpacing: "0.02em",
+          }}
+        >
+          {doc.user_permission || "view"}
+        </span>
+      </td>
+
+      {/* Date */}
+      <td style={{ padding: "14px 16px" }}>
+        <span style={{ fontSize: 12, color: "var(--ink-40)" }}>
+          {formatDate(doc.created_at)}
+        </span>
+      </td>
+
+      {/* Actions */}
+      <td style={{ padding: "14px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
+          <ActionBtn title="AI Summary" onClick={onSummary} color="#fbbf24">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </ActionBtn>
+          <ActionBtn title="AI Chat" onClick={onChat} color="#93c5fd">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+            </svg>
+          </ActionBtn>
+          {canEdit && (
+            <ActionBtn title="Upload Version" onClick={onVersion} color="#c4b5fd">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+              </svg>
+            </ActionBtn>
+          )}
+          {canManage && (
+            <ActionBtn title="Manage Access" onClick={onShare} color="#4ade80">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            </ActionBtn>
+          )}
+          <ActionBtn title="Download" onClick={onDownload} color="#94a3b8">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+          </ActionBtn>
+          <Link
+            href={`/documents/${doc.id}`}
+            title="Open Document"
+            style={{
+              width: 26,
+              height: 26,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 5,
+              color: "var(--ink-60)",
+              transition: "all 0.1s",
+              border: "1px solid transparent",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgb(31 92 246 / 0.1)";
+              e.currentTarget.style.color = "#93c5fd";
+              e.currentTarget.style.borderColor = "rgb(31 92 246 / 0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--ink-60)";
+              e.currentTarget.style.borderColor = "transparent";
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </Link>
+          {canManage && doc.lifecycle_status === "active" && (
+            <ActionBtn title="Archive" onClick={onArchive} color="#fbbf24">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="21 8 21 21 3 21 3 8" /><rect x="1" y="3" width="22" height="5" /><line x1="10" y1="12" x2="14" y2="12" />
+              </svg>
+            </ActionBtn>
+          )}
+          {canManage && doc.lifecycle_status === "archived" && (
+            <ActionBtn title="Restore" onClick={onRestore} color="#4ade80">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+              </svg>
+            </ActionBtn>
+          )}
+          {canManage && (
+            <ActionBtn title="Delete" onClick={onDelete} color="#f87171">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2" />
+              </svg>
+            </ActionBtn>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+};
+
+// Small icon button helper
+const ActionBtn: React.FC<{
+  title: string;
+  onClick: () => void;
+  color: string;
+  children: React.ReactNode;
+}> = ({ title, onClick, color, children }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    style={{
+      width: 26,
+      height: 26,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 5,
+      border: "1px solid transparent",
+      background: "transparent",
+      color: "var(--ink-60)",
+      cursor: "pointer",
+      transition: "all 0.1s",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.color = color;
+      e.currentTarget.style.background = `${color}14`;
+      e.currentTarget.style.borderColor = `${color}30`;
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.color = "var(--ink-60)";
+      e.currentTarget.style.background = "transparent";
+      e.currentTarget.style.borderColor = "transparent";
+    }}
+  >
+    {children}
+  </button>
+);
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<EnterpriseDocument[]>([]);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
@@ -46,10 +456,10 @@ export default function DocumentsPage() {
   const [sortField, setSortField] = useState<DocumentSortField>("-created_at");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Multi-Selection State for Bulk Operations
+  // Multi-Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Modals & Action Targets
+  // Modals
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
@@ -60,7 +470,6 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Specific Feature Modals
   const [shareDoc, setShareDoc] = useState<EnterpriseDocument | null>(null);
   const [versionDoc, setVersionDoc] = useState<EnterpriseDocument | null>(null);
   const [summaryDoc, setSummaryDoc] = useState<EnterpriseDocument | null>(null);
@@ -68,16 +477,12 @@ export default function DocumentsPage() {
   const [textViewerDoc, setTextViewerDoc] = useState<EnterpriseDocument | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<EnterpriseDocument | null>(null);
 
-  // Debounce search input (300ms)
+  // Debounce
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setCurrentPage(1);
-    }, 300);
+    const timer = setTimeout(() => { setDebouncedSearch(search); setCurrentPage(1); }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch Documents
   const fetchDocuments = useCallback(
     async (page: number = currentPage) => {
       try {
@@ -96,8 +501,7 @@ export default function DocumentsPage() {
         setDocuments(res.data || []);
         if (res.meta) setMeta(res.meta);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to load documents.";
-        setError(msg);
+        setError(err instanceof Error ? err.message : "Failed to load documents.");
       } finally {
         setLoading(false);
       }
@@ -105,17 +509,10 @@ export default function DocumentsPage() {
     [currentPage, debouncedSearch, lifecycleFilter, confidentialityFilter, sharedWithMe, sortField],
   );
 
-  useEffect(() => {
-    fetchDocuments(currentPage);
-  }, [fetchDocuments, currentPage]);
+  useEffect(() => { fetchDocuments(currentPage); }, [fetchDocuments, currentPage]);
 
-  // Selection Handlers
   const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(documents.map((d) => d.id));
-    } else {
-      setSelectedIds([]);
-    }
+    setSelectedIds(checked ? documents.map((d) => d.id) : []);
   };
 
   const handleToggleSelect = (id: string) => {
@@ -124,19 +521,13 @@ export default function DocumentsPage() {
     );
   };
 
-  // Upload Handler
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadFile) return;
-
     try {
       setUploading(true);
       setUploadError(null);
-      const parsedTags = uploadTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-
+      const parsedTags = uploadTags.split(",").map((t) => t.trim()).filter(Boolean);
       await uploadDocument(uploadFile, {
         title: uploadTitle || uploadFile.name,
         category: uploadCategory,
@@ -144,7 +535,6 @@ export default function DocumentsPage() {
         tags: parsedTags,
         onUploadProgress: (p) => setUploadProgress(p),
       });
-
       setSuccessMessage("Document uploaded successfully.");
       setIsUploadModalOpen(false);
       setUploadFile(null);
@@ -153,32 +543,20 @@ export default function DocumentsPage() {
       setUploadProgress(null);
       fetchDocuments(1);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Upload failed.";
-      setUploadError(msg);
+      setUploadError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
     }
   };
 
-  // Lifecycle Action Handlers
   const handleArchive = async (id: string) => {
-    try {
-      await archiveDocument(id);
-      setSuccessMessage("Document archived.");
-      fetchDocuments();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Archive failed.");
-    }
+    try { await archiveDocument(id); setSuccessMessage("Document archived."); fetchDocuments(); }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : "Archive failed."); }
   };
 
   const handleRestore = async (id: string) => {
-    try {
-      await restoreDocument(id);
-      setSuccessMessage("Document restored to active state.");
-      fetchDocuments();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Restore failed.");
-    }
+    try { await restoreDocument(id); setSuccessMessage("Document restored."); fetchDocuments(); }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : "Restore failed."); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -193,402 +571,298 @@ export default function DocumentsPage() {
     }
   };
 
-  // Helper formatting
-  const getConfidentialityBadge = (conf: DocumentConfidentiality) => {
-    switch (conf) {
-      case "public":
-        return <Badge variant="neutral" className="text-xs">Public</Badge>;
-      case "internal":
-        return <Badge variant="primary" className="text-xs">Internal</Badge>;
-      case "confidential":
-        return <Badge variant="warning" className="text-xs">Confidential</Badge>;
-      case "restricted":
-        return <Badge variant="danger" className="text-xs">Restricted</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const getLifecycleBadge = (status: DocumentLifecycleStatus) => {
-    switch (status) {
-      case "active":
-        return <Badge variant="success" className="text-xs">Active</Badge>;
-      case "draft":
-        return <Badge variant="neutral" className="text-xs">Draft</Badge>;
-      case "archived":
-        return <Badge variant="warning" className="text-xs">Archived</Badge>;
-      case "expired":
-        return <Badge variant="danger" className="text-xs">Expired</Badge>;
-      case "deleted":
-        return <Badge variant="danger" className="text-xs">Deleted</Badge>;
-      default:
-        return null;
-    }
-  };
-
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div style={{ maxWidth: 1300 }}>
+
+        {/* ── Page header ── */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            marginBottom: 40,
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
           <div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Document Intelligence</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Enterprise document repository with immutable versioning, RBAC access grants, AI synthesis & audit trails.
+            <p className="eyebrow" style={{ color: "var(--accent)", marginBottom: 12 }}>
+              Document Library
             </p>
+            <h1
+              style={{
+                fontFamily: "var(--font-jakarta, var(--font-inter, sans-serif))",
+                fontSize: "clamp(1.75rem, 3vw, 2.5rem)",
+                fontWeight: 800,
+                letterSpacing: "-0.04em",
+                color: "#f8fafc",
+                lineHeight: 1.1,
+                margin: 0,
+              }}
+            >
+              Your organization&apos;s knowledge,
+              <br />
+              <span style={{ color: "var(--ink-40)" }}>organized and ready to move.</span>
+            </h1>
           </div>
           <button
             onClick={() => setIsUploadModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition"
+            className="btn btn-primary"
+            style={{ flexShrink: 0 }}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             Upload Document
           </button>
         </div>
 
-        {/* Success / Error Banners */}
+        {/* ── Status banners ── */}
         {successMessage && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-xl flex items-center justify-between">
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "11px 16px",
+              background: "rgb(22 163 74 / 0.08)",
+              border: "1px solid rgb(22 163 74 / 0.2)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#4ade80",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <span>{successMessage}</span>
-            <button onClick={() => setSuccessMessage(null)} className="text-emerald-300 text-xs hover:underline">
+            <button
+              onClick={() => setSuccessMessage(null)}
+              style={{ background: "none", border: "none", color: "#4ade80", fontSize: 12, cursor: "pointer", opacity: 0.7 }}
+            >
               Dismiss
             </button>
           </div>
         )}
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl flex items-center justify-between">
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "11px 16px",
+              background: "rgb(220 38 38 / 0.08)",
+              border: "1px solid rgb(220 38 38 / 0.2)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#f87171",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-300 text-xs hover:underline">
+            <button
+              onClick={() => setError(null)}
+              style={{ background: "none", border: "none", color: "#f87171", fontSize: 12, cursor: "pointer", opacity: 0.7 }}
+            >
               Dismiss
             </button>
           </div>
         )}
 
-        {/* Filter Toolbar */}
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {/* Search */}
-            <div className="lg:col-span-2">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search documents by title, file name, tags..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Lifecycle */}
-            <div>
-              <select
-                value={lifecycleFilter}
-                onChange={(e) => setLifecycleFilter(e.target.value as DocumentLifecycleStatus | "all")}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Lifecycles</option>
-                <option value="active">Active</option>
-                <option value="draft">Draft</option>
-                <option value="archived">Archived</option>
-                <option value="expired">Expired</option>
-              </select>
-            </div>
-
-            {/* Confidentiality */}
-            <div>
-              <select
-                value={confidentialityFilter}
-                onChange={(e) => setConfidentialityFilter(e.target.value as DocumentConfidentiality | "all")}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Confidentiality</option>
-                <option value="public">Public</option>
-                <option value="internal">Internal</option>
-                <option value="confidential">Confidential</option>
-                <option value="restricted">Restricted</option>
-              </select>
-            </div>
-
-            {/* Sort */}
-            <div>
-              <select
-                value={sortField}
-                onChange={(e) => setSortField(e.target.value as DocumentSortField)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="-created_at">Newest First</option>
-                <option value="created_at">Oldest First</option>
-                <option value="title">Title (A-Z)</option>
-                <option value="-title">Title (Z-A)</option>
-                <option value="-file_size">Largest Size</option>
-              </select>
-            </div>
+        {/* ── Filter toolbar ── */}
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginBottom: 24,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          {/* Search */}
+          <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200 }}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--ink-60)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+            >
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search documents..."
+              className="input"
+              style={{ paddingLeft: 36 }}
+            />
           </div>
 
-          <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={sharedWithMe}
-                onChange={(e) => setSharedWithMe(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500"
-              />
-              <span>Show only documents explicitly shared with me</span>
-            </label>
-            {meta && (
-              <span>Showing {documents.length} of {meta.total_items} items</span>
-            )}
-          </div>
+          <select
+            value={lifecycleFilter}
+            onChange={(e) => setLifecycleFilter(e.target.value as DocumentLifecycleStatus | "all")}
+            className="input"
+            style={{ flex: "0 1 160px" }}
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
+            <option value="expired">Expired</option>
+          </select>
+
+          <select
+            value={confidentialityFilter}
+            onChange={(e) => setConfidentialityFilter(e.target.value as DocumentConfidentiality | "all")}
+            className="input"
+            style={{ flex: "0 1 180px" }}
+          >
+            <option value="all">All Access Levels</option>
+            <option value="public">Public</option>
+            <option value="internal">Internal</option>
+            <option value="confidential">Confidential</option>
+            <option value="restricted">Restricted</option>
+          </select>
+
+          <select
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value as DocumentSortField)}
+            className="input"
+            style={{ flex: "0 1 160px" }}
+          >
+            <option value="-created_at">Newest First</option>
+            <option value="created_at">Oldest First</option>
+            <option value="title">Title A–Z</option>
+            <option value="-title">Title Z–A</option>
+            <option value="-file_size">Largest</option>
+          </select>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              color: "var(--ink-40)",
+              cursor: "pointer",
+              userSelect: "none",
+              whiteSpace: "nowrap",
+              paddingLeft: 4,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={sharedWithMe}
+              onChange={(e) => setSharedWithMe(e.target.checked)}
+              style={{ accentColor: "var(--accent)", width: 13, height: 13 }}
+            />
+            Shared with me
+          </label>
+
+          {meta && (
+            <span style={{ fontSize: 12, color: "var(--ink-60)", marginLeft: "auto", whiteSpace: "nowrap" }}>
+              {documents.length} / {meta.total_items}
+            </span>
+          )}
         </div>
 
-        {/* Documents Table */}
-        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 overflow-hidden shadow-xl">
+        {/* ── Document Table ── */}
+        <div
+          style={{
+            background: "var(--ink-90)",
+            border: "1px solid var(--ink-70)",
+            borderRadius: 12,
+            overflow: "hidden",
+          }}
+        >
           {loading ? (
-            <div className="py-20 flex justify-center">
-              <LoadingSpinner size="lg" />
-            </div>
+            <LoadingSpinner size="lg" message="Loading documents..." />
           ) : documents.length === 0 ? (
-            <div className="p-8">
-              <EmptyState
-                title="No documents found"
-                description="Try adjusting your search criteria, or upload your first document."
-                actionLabel="Upload Document"
-                onAction={() => setIsUploadModalOpen(true)}
-              />
-            </div>
+            <EmptyState
+              title="No documents found"
+              description="Try adjusting your search or filters, or upload your first document to begin building your knowledge library."
+              actionLabel="Upload Document"
+              onAction={() => setIsUploadModalOpen(true)}
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-enterprise" style={{ minWidth: 900 }}>
+                <thead>
                   <tr>
-                    <th className="p-4 w-10">
+                    <th style={{ width: 40, paddingLeft: 16 }}>
                       <input
                         type="checkbox"
                         checked={selectedIds.length === documents.length && documents.length > 0}
                         onChange={(e) => handleSelectAll(e.target.checked)}
-                        className="rounded border-slate-700 bg-slate-800 text-blue-600"
+                        style={{ width: 13, height: 13, accentColor: "var(--accent)" }}
                       />
                     </th>
-                    <th className="p-4">Document</th>
-                    <th className="p-4">Version</th>
-                    <th className="p-4">Confidentiality</th>
-                    <th className="p-4">Lifecycle</th>
-                    <th className="p-4">Permission</th>
-                    <th className="p-4">Created</th>
-                    <th className="p-4 text-right">Actions</th>
+                    <th>Document</th>
+                    <th>Version</th>
+                    <th>Access</th>
+                    <th>Status</th>
+                    <th>Permission</th>
+                    <th>Updated</th>
+                    <th style={{ textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/80">
-                  {documents.map((doc) => {
-                    const isSelected = selectedIds.includes(doc.id);
-                    const canEdit = doc.user_permission === "edit" || doc.user_permission === "manage";
-                    const canManage = doc.user_permission === "manage";
-
-                    return (
-                      <tr
-                        key={doc.id}
-                        className={`hover:bg-slate-800/40 transition ${
-                          isSelected ? "bg-blue-600/10" : ""
-                        }`}
-                      >
-                        <td className="p-4">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleSelect(doc.id)}
-                            className="rounded border-slate-700 bg-slate-800 text-blue-600"
-                          />
-                        </td>
-                        <td className="p-4">
-                          <div className="space-y-1">
-                            <Link
-                              href={`/documents/${doc.id}`}
-                              className="font-semibold text-slate-100 hover:text-blue-400 transition"
-                            >
-                              {doc.title || doc.file_name}
-                            </Link>
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                              <span>{doc.file_name}</span>
-                              {doc.category && <span>• {doc.category}</span>}
-                              {doc.file_size && (
-                                <span>• {(doc.file_size / (1024 * 1024)).toFixed(2)} MB</span>
-                              )}
-                            </div>
-                            {doc.tags && doc.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {doc.tags.map((t) => (
-                                  <span
-                                    key={t}
-                                    className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400"
-                                  >
-                                    #{t}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <button
-                            onClick={() => setVersionDoc(doc)}
-                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs font-mono font-semibold text-blue-400 transition"
-                            title="Click to view version history"
-                          >
-                            v{doc.current_version_number || 1}
-                            {doc.version_count > 1 && (
-                              <span className="text-[10px] text-slate-400 ml-1">
-                                ({doc.version_count})
-                              </span>
-                            )}
-                          </button>
-                        </td>
-                        <td className="p-4">{getConfidentialityBadge(doc.confidentiality)}</td>
-                        <td className="p-4">{getLifecycleBadge(doc.lifecycle_status)}</td>
-                        <td className="p-4">
-                          <span className="capitalize text-xs font-medium px-2 py-1 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
-                            {doc.user_permission || "view"}
-                          </span>
-                        </td>
-                        <td className="p-4 text-xs text-slate-400">
-                          {new Date(doc.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* AI Summary */}
-                            <button
-                              onClick={() => setSummaryDoc(doc)}
-                              className="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition"
-                              title="AI Summary"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                            </button>
-
-                            {/* AI Chat */}
-                            <button
-                              onClick={() => setChatDoc(doc)}
-                              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition"
-                              title="AI Chat"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                              </svg>
-                            </button>
-
-                            {/* Upload New Version */}
-                            {canEdit && (
-                              <button
-                                onClick={() => setVersionDoc(doc)}
-                                className="p-1.5 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition"
-                                title="Upload New Version"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                </svg>
-                              </button>
-                            )}
-
-                            {/* Share */}
-                            {canManage && (
-                              <button
-                                onClick={() => setShareDoc(doc)}
-                                className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
-                                title="Manage Access Grants"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                </svg>
-                              </button>
-                            )}
-
-                            {/* Download */}
-                            <button
-                              onClick={() => downloadDocument(doc.id, doc.file_name)}
-                              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-                              title="Download File"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                              </svg>
-                            </button>
-
-                            {/* Workspace Details */}
-                            <Link
-                              href={`/documents/${doc.id}`}
-                              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition"
-                              title="Open Full Workspace"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </Link>
-
-                            {/* Archive / Restore */}
-                            {canManage && doc.lifecycle_status === "active" && (
-                              <button
-                                onClick={() => handleArchive(doc.id)}
-                                className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition"
-                                title="Archive Document"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                                </svg>
-                              </button>
-                            )}
-                            {canManage && doc.lifecycle_status === "archived" && (
-                              <button
-                                onClick={() => handleRestore(doc.id)}
-                                className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
-                                title="Restore Document"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                              </button>
-                            )}
-
-                            {/* Delete */}
-                            {canManage && (
-                              <button
-                                onClick={() => setDeleteDoc(doc)}
-                                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-                                title="Delete Document"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                <tbody>
+                  {documents.map((doc) => (
+                    <DocRow
+                      key={doc.id}
+                      doc={doc}
+                      isSelected={selectedIds.includes(doc.id)}
+                      onToggle={() => handleToggleSelect(doc.id)}
+                      onSummary={() => setSummaryDoc(doc)}
+                      onChat={() => setChatDoc(doc)}
+                      onVersion={() => setVersionDoc(doc)}
+                      onShare={() => setShareDoc(doc)}
+                      onDownload={() => downloadDocument(doc.id, doc.file_name)}
+                      onArchive={() => handleArchive(doc.id)}
+                      onRestore={() => handleRestore(doc.id)}
+                      onDelete={() => setDeleteDoc(doc)}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* Pagination Footer */}
+          {/* Pagination */}
           {meta && meta.total_pages > 1 && (
-            <div className="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <div>Page {meta.page} of {meta.total_pages}</div>
-              <div className="flex gap-2">
+            <div
+              style={{
+                padding: "14px 20px",
+                borderTop: "1px solid var(--ink-70)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <span style={{ fontSize: 12, color: "var(--ink-40)" }}>
+                Page {meta.page} of {meta.total_pages}
+              </span>
+              <div style={{ display: "flex", gap: 6 }}>
                 <button
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-200"
+                  className="btn btn-ghost btn-sm"
+                  style={{ opacity: currentPage <= 1 ? 0.4 : 1 }}
                 >
-                  Previous
+                  ← Previous
                 </button>
                 <button
                   disabled={currentPage >= meta.total_pages}
                   onClick={() => setCurrentPage((p) => Math.min(p + 1, meta.total_pages))}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-200"
+                  className="btn btn-ghost btn-sm"
+                  style={{ opacity: currentPage >= meta.total_pages ? 0.4 : 1 }}
                 >
-                  Next
+                  Next →
                 </button>
               </div>
             </div>
@@ -596,70 +870,62 @@ export default function DocumentsPage() {
         </div>
       </div>
 
-      {/* Floating Bulk Actions Bar */}
+      {/* ── Bulk Actions Bar ── */}
       <BulkActionsBar
         selectedIds={selectedIds}
         onClearSelection={() => setSelectedIds([])}
-        onSuccess={(result) => {
-          setSuccessMessage(result.message);
-          fetchDocuments();
-        }}
+        onSuccess={(result) => { setSuccessMessage(result.message); fetchDocuments(); }}
         onError={(err) => setError(err)}
       />
 
-      {/* Upload Document Modal */}
-      <Modal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        title="Upload Document"
-      >
-        <form onSubmit={handleUploadSubmit} className="space-y-4">
+      {/* ── Upload Modal ── */}
+      <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title="Upload Document">
+        <form onSubmit={handleUploadSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {uploadError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg">
+            <div style={{ padding: "10px 14px", background: "rgb(220 38 38 / 0.08)", border: "1px solid rgb(220 38 38 / 0.2)", borderRadius: 8, fontSize: 13, color: "#f87171" }}>
               {uploadError}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">File</label>
+            <label className="input-label">File *</label>
             <input
               type="file"
               required
-              onChange={(e) => {
-                if (e.target.files?.[0]) setUploadFile(e.target.files[0]);
-              }}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+              onChange={(e) => { if (e.target.files?.[0]) setUploadFile(e.target.files[0]); }}
+              className="input"
+              style={{ padding: "8px 12px", cursor: "pointer" }}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Title (Optional)</label>
+            <label className="input-label">Title (Optional)</label>
             <input
               type="text"
               value={uploadTitle}
               onChange={(e) => setUploadTitle(e.target.value)}
               placeholder="e.g. Master Services Agreement 2026"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+              className="input"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Category</label>
+              <label className="input-label">Category</label>
               <input
                 type="text"
                 value={uploadCategory}
                 onChange={(e) => setUploadCategory(e.target.value)}
                 placeholder="e.g. Legal, Finance"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Confidentiality</label>
+              <label className="input-label">Access Level</label>
               <select
                 value={uploadConfidentiality}
                 onChange={(e) => setUploadConfidentiality(e.target.value as DocumentConfidentiality)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+                className="input"
               >
                 <option value="public">Public</option>
                 <option value="internal">Internal</option>
@@ -670,80 +936,86 @@ export default function DocumentsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Tags (Comma-separated)</label>
+            <label className="input-label">Tags (comma-separated)</label>
             <input
               type="text"
               value={uploadTags}
               onChange={(e) => setUploadTags(e.target.value)}
               placeholder="e.g. 2026, agreement, legal"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100"
+              className="input"
             />
           </div>
 
           {uploading && uploadProgress !== null && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-slate-400">
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12, color: "var(--ink-40)" }}>
                 <span>Uploading...</span>
                 <span>{uploadProgress}%</span>
               </div>
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                <div className="bg-blue-600 h-full" style={{ width: `${uploadProgress}%` }} />
+              <div style={{ height: 3, background: "var(--ink-70)", borderRadius: 2, overflow: "hidden" }}>
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${uploadProgress}%`,
+                    background: "var(--accent)",
+                    borderRadius: 2,
+                    transition: "width 0.3s ease",
+                  }}
+                />
               </div>
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 4 }}>
             <button
               type="button"
               onClick={() => setIsUploadModalOpen(false)}
-              className="px-4 py-2 bg-slate-800 text-slate-300 text-sm rounded-lg"
+              className="btn btn-ghost"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={uploading || !uploadFile}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg flex items-center gap-2"
+              className="btn btn-primary"
             >
-              {uploading ? <LoadingSpinner size="sm" /> : "Upload"}
+              {uploading ? (
+                <>
+                  <span style={{ width: 12, height: 12, border: "2px solid rgb(255 255 255 / 0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }} />
+                  Uploading...
+                </>
+              ) : (
+                "Upload Document"
+              )}
             </button>
           </div>
         </form>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </Modal>
 
-      {/* Feature Modals */}
+      {/* Feature Modals — unchanged logic */}
       <ShareDocumentModal
         isOpen={!!shareDoc}
         onClose={() => setShareDoc(null)}
         document={shareDoc}
-        onSuccess={() => {
-          setSuccessMessage("Access grants updated.");
-          fetchDocuments();
-        }}
+        onSuccess={() => { setSuccessMessage("Access grants updated."); fetchDocuments(); }}
       />
-
       <UploadVersionModal
         isOpen={!!versionDoc}
         onClose={() => setVersionDoc(null)}
         document={versionDoc}
-        onSuccess={() => {
-          setSuccessMessage("New version uploaded.");
-          fetchDocuments();
-        }}
+        onSuccess={() => { setSuccessMessage("New version uploaded."); fetchDocuments(); }}
       />
-
       <DocumentAISummaryModal
         isOpen={!!summaryDoc}
         onClose={() => setSummaryDoc(null)}
         document={summaryDoc}
       />
-
       <DocumentAIChatModal
         isOpen={!!chatDoc}
         onClose={() => setChatDoc(null)}
         document={chatDoc}
       />
-
       {textViewerDoc && (
         <ExtractedTextViewerModal
           document={textViewerDoc}
@@ -752,31 +1024,23 @@ export default function DocumentsPage() {
         />
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation */}
       {deleteDoc && (
         <Modal
           isOpen={!!deleteDoc}
           onClose={() => setDeleteDoc(null)}
           title="Delete Document"
+          size="sm"
         >
-          <div className="space-y-4">
-            <p className="text-sm text-slate-300">
-              Are you sure you want to delete <strong className="text-slate-100">{deleteDoc.title || deleteDoc.file_name}</strong>?
-              This will transition the document to deleted state while preserving version audit history.
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6 }}>
+              Delete <strong style={{ color: "#f1f5f9" }}>{deleteDoc.title || deleteDoc.file_name}</strong>?
+              <br />
+              The document will be marked as deleted while preserving the version audit history.
             </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteDoc(null)}
-                className="px-4 py-2 bg-slate-800 text-slate-300 text-sm rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg"
-              >
-                Delete Document
-              </button>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setDeleteDoc(null)} className="btn btn-ghost">Cancel</button>
+              <button onClick={handleDeleteConfirm} className="btn btn-danger">Delete Document</button>
             </div>
           </div>
         </Modal>
