@@ -11,6 +11,7 @@ Usage:
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -95,6 +96,12 @@ class Settings(BaseSettings):
     # Storage & Uploads (Milestone 5, 6.1 & 11)
     # -------------------------------------------------------------------------
     STORAGE_DIR: str = "/app/storage/documents"
+    STORAGE_BACKEND: str = "local"  # "local" (Docker disk) or "supabase" (Cloud bucket)
+    SUPABASE_STORAGE_BUCKET: str = "documents"
+    SUPABASE_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_TIMEOUT_SECONDS: int = 30
+
     MAX_UPLOAD_SIZE_MB: int = 25
     MAX_UPLOAD_SIZE_BYTES: int = (
         25 * 1024 * 1024
@@ -103,18 +110,32 @@ class Settings(BaseSettings):
     DOCUMENT_EXPIRATION_BATCH_SIZE: int = 500
 
     # -------------------------------------------------------------------------
-    # AI Assistant — Ollama LLM (Milestone 7)
+    # AI Assistant — LLM Provider & Hosted Inference
     # -------------------------------------------------------------------------
+    # Provider options: "ollama" (local development default), "groq" (cloud free tier)
+    LLM_PROVIDER: str = "ollama"
+
+    # Ollama settings (used when LLM_PROVIDER="ollama")
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3.2:1b"
     OLLAMA_TIMEOUT_SECONDS: int = 180
 
+    # Hosted Groq Cloud API settings (used when LLM_PROVIDER="groq")
+    # Configurable via environment variables (e.g. llama-3.3-70b-versatile, llama-3.1-8b-instant)
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_TIMEOUT_SECONDS: int = 60
+
     # -------------------------------------------------------------------------
-    # AI Assistant — Embeddings (Milestone 7)
+    # AI Assistant — Embeddings (Milestone 7 & Cloud Free Tier)
     # -------------------------------------------------------------------------
-    # sentence-transformers model used for text embedding.
-    # all-MiniLM-L6-v2 produces 384-dimensional L2-normalized vectors.
+    # Provider options: "local" (in-container SentenceTransformer), "huggingface" (cloud router API)
+    EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    HF_TOKEN: str | None = None
+    HF_ROUTER_BASE_URL: str = "https://router.huggingface.co/hf-inference/models"
+    HF_TIMEOUT_SECONDS: int = 60
 
     # -------------------------------------------------------------------------
     # AI Assistant — FAISS Vector Store (Milestone 7)
@@ -122,6 +143,10 @@ class Settings(BaseSettings):
     # Absolute path to the persisted FAISS index file inside the container.
     # The directory must be mounted as a Docker volume to survive restarts.
     FAISS_INDEX_PATH: str = "/app/data/faiss/index.faiss"
+    # Auto-warmup on startup (loads or reconstructs from DB if missing/empty)
+    FAISS_AUTO_WARMUP: bool = True
+    # If the index file is missing or has 0 vectors, rebuild from DB embeddings
+    FAISS_AUTO_REBUILD_ON_EMPTY: bool = True
 
     # -------------------------------------------------------------------------
     # AI Assistant — RAG Retrieval Tuning (Milestone 7)
@@ -443,5 +468,36 @@ def validate_runtime_configuration(cfg: Settings | None = None) -> list[str]:
     if not target.WEBHOOK_SIGNING_SECRET.strip():
         msg = "WEBHOOK_SIGNING_SECRET is not set — webhooks will use a derived key."
         warnings.append(msg)
+
+    # 8. FAISS Vector Store validation
+    index_file = Path(target.FAISS_INDEX_PATH)
+    if not index_file.exists():
+        warnings.append(
+            f"FAISS index file not found at '{target.FAISS_INDEX_PATH}'. "
+            "Self-healing auto-warmup will construct it from database embeddings on startup."
+        )
+
+    # 9. Hosted LLM configuration check
+    if target.LLM_PROVIDER.lower() == "groq" and not target.GROQ_API_KEY:
+        warnings.append(
+            "LLM_PROVIDER is set to 'groq' but GROQ_API_KEY is not configured. "
+            "AI assistant generation requests will fail with 503 until an API key is provided."
+        )
+
+    # 10. Hosted Hugging Face embeddings configuration check
+    if target.EMBEDDING_PROVIDER.lower() == "huggingface" and not target.HF_TOKEN:
+        warnings.append(
+            "EMBEDDING_PROVIDER is set to 'huggingface' but HF_TOKEN is not configured. "
+            "Vector embeddings will fail until a Hugging Face user access token is provided."
+        )
+
+    # 11. Supabase Storage configuration check
+    if target.STORAGE_BACKEND.lower() == "supabase":
+        if not target.SUPABASE_URL:
+            warnings.append("STORAGE_BACKEND is set to 'supabase' but SUPABASE_URL is not configured.")
+        if not target.SUPABASE_SERVICE_ROLE_KEY:
+            warnings.append(
+                "STORAGE_BACKEND is set to 'supabase' but SUPABASE_SERVICE_ROLE_KEY is not configured."
+            )
 
     return warnings

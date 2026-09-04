@@ -374,3 +374,96 @@ class VectorStoreService:
 # Module-level singleton — shared across the worker process
 # ---------------------------------------------------------------------------
 vector_store = VectorStoreService()
+
+
+async def warm_up_vector_store() -> int:
+    """
+    Ensure the FAISS vector store is initialized, loaded, and synchronized.
+
+    Resilience strategy for cloud deployments (Render, Railway, Fly.io, etc.):
+    1. If FAISS index and mapping exist on disk and vector_count > 0:
+       Loads the index directly (0ms fast path).
+    2. If index file is missing OR contains 0 vectors while PostgreSQL contains
+       active chunk embeddings (e.g. fresh ephemeral container deployment):
+       Rebuilds the index from database embeddings and persists to disk.
+    3. If no embeddings exist in the database:
+       Safely initializes an empty index.
+
+    Returns:
+        The number of vectors in the active index.
+    """
+    if not settings.FAISS_AUTO_WARMUP:
+        logger.info("FAISS auto-warmup disabled by configuration.")
+        vector_store.ensure_loaded()
+        return vector_store.vector_count
+
+    index_path = Path(settings.FAISS_INDEX_PATH)
+
+    # 1. Fast path: load from disk if present
+    if index_path.exists():
+        vector_store.load()
+        if vector_store.vector_count > 0 or not settings.FAISS_AUTO_REBUILD_ON_EMPTY:
+            logger.info(
+                "FAISS warm-up: index loaded from disk with %d vectors (path: %s).",
+                vector_store.vector_count,
+                index_path,
+            )
+            return vector_store.vector_count
+        logger.info(
+            "FAISS warm-up: index file exists at '%s' but contains 0 vectors. "
+            "Checking database to self-heal.",
+            index_path,
+        )
+    else:
+        logger.info(
+            "FAISS warm-up: index file not found at '%s'. "
+            "Checking database for embeddings to construct index.",
+            index_path,
+        )
+
+    # 2. Self-healing rebuild from PostgreSQL
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.repositories.ai_embedding_repository import AIEmbeddingRepository
+        from app.services.embedding_service import embedding_service
+
+        async with AsyncSessionLocal() as session:
+            repo = AIEmbeddingRepository(session)
+            all_embeddings = await repo.get_all_with_chunks()
+
+        valid = [(emb, emb.chunk) for emb in all_embeddings if emb.chunk is not None]
+        if not valid:
+            logger.info("FAISS warm-up: no active embedding records in database — empty index ready.")
+            vector_store.load()
+            return 0
+
+        logger.info(
+            "FAISS warm-up: found %d embedding records in database. Constructing FAISS index.",
+            len(valid),
+        )
+        texts = [chunk.content for _, chunk in valid]
+        vectors = embedding_service.embed_batch(texts)
+
+        chunk_vectors = [
+            ChunkVector(chunk_id=chunk.id, vector=vec)
+            for (_, chunk), vec in zip(valid, vectors, strict=False)
+        ]
+
+        vector_store.build_index(chunk_vectors)
+        vector_store.save()
+
+        logger.info(
+            "FAISS warm-up complete: %d vectors indexed and saved to %s.",
+            vector_store.vector_count,
+            index_path,
+        )
+        return vector_store.vector_count
+
+    except Exception as exc:
+        logger.warning(
+            "FAISS warm-up failed during database self-healing (%s). "
+            "Initializing empty fallback index.",
+            exc,
+        )
+        vector_store.load()
+        return vector_store.vector_count

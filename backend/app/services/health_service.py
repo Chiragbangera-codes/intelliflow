@@ -120,31 +120,51 @@ class HealthService:
                 details={"error": str(exc)},
             )
 
-        # 4. Ollama LLM Check
-        try:
-            t0 = time.perf_counter()
-            async with httpx.AsyncClient(timeout=1.5) as client:
-                res = await client.get(f"{settings.OLLAMA_BASE_URL}/api/version")
-                duration_ms = round((time.perf_counter() - t0) * 1000, 2)
-                if res.status_code == 200:
-                    dependencies["ollama"] = DependencyHealthItem(
-                        status="healthy",
-                        latency_ms=duration_ms,
-                        details={
-                            "model": settings.OLLAMA_MODEL,
-                            "version": res.json().get("version", "unknown"),
-                        },
-                    )
-                else:
-                    dependencies["ollama"] = DependencyHealthItem(
-                        status="degraded",
-                        details={"status_code": res.status_code},
-                    )
-        except Exception:
-            dependencies["ollama"] = DependencyHealthItem(
-                status="degraded",
-                details={"warning": "Ollama LLM endpoint unreachable (RAG fallback active)"},
-            )
+        # 4. LLM Check (Groq or Ollama)
+        if settings.LLM_PROVIDER.lower() == "groq":
+            if settings.GROQ_API_KEY:
+                llm_item = DependencyHealthItem(
+                    status="healthy",
+                    details={
+                        "provider": "groq",
+                        "model": settings.GROQ_MODEL,
+                    },
+                )
+            else:
+                llm_item = DependencyHealthItem(
+                    status="degraded",
+                    details={
+                        "provider": "groq",
+                        "warning": "GROQ_API_KEY is not configured",
+                    },
+                )
+            dependencies["llm"] = llm_item
+            dependencies["ollama"] = llm_item  # backwards compatibility
+        else:
+            try:
+                t0 = time.perf_counter()
+                async with httpx.AsyncClient(timeout=1.5) as client:
+                    res = await client.get(f"{settings.OLLAMA_BASE_URL}/api/version")
+                    duration_ms = round((time.perf_counter() - t0) * 1000, 2)
+                    if res.status_code == 200:
+                        dependencies["ollama"] = DependencyHealthItem(
+                            status="healthy",
+                            latency_ms=duration_ms,
+                            details={
+                                "model": settings.OLLAMA_MODEL,
+                                "version": res.json().get("version", "unknown"),
+                            },
+                        )
+                    else:
+                        dependencies["ollama"] = DependencyHealthItem(
+                            status="degraded",
+                            details={"status_code": res.status_code},
+                        )
+            except Exception:
+                dependencies["ollama"] = DependencyHealthItem(
+                    status="degraded",
+                    details={"warning": "Ollama LLM endpoint unreachable (RAG fallback active)"},
+                )
 
         # 5. Celery Worker Check
         try:

@@ -67,15 +67,14 @@ async def _async_process_document_ocr(
         )
 
         try:
-            # 2. Resolve safe physical path
-            file_path = storage_svc.resolve_path(doc.storage_path)
-
-            # 3. Extract text
-            extracted_text = extractor_svc.extract_text(
-                file_path=file_path,
-                file_name=doc.file_name,
-                file_type=doc.file_type,
-            )
+            # 2. Resolve safe physical path (local or downloaded from Supabase Storage)
+            async with storage_svc.scoped_local_path(doc.storage_path) as file_path:
+                # 3. Extract text
+                extracted_text = extractor_svc.extract_text(
+                    file_path=file_path,
+                    file_name=doc.file_name,
+                    file_type=doc.file_type,
+                )
 
             # 4. Chunk text
             chunks = extractor_svc.chunk_text(extracted_text)

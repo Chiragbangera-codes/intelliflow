@@ -1,0 +1,85 @@
+# =============================================================================
+# IntelliFlow AI — Render Deployment Blueprint
+#
+# Free Tier Web Service: 512 MB RAM, 0.1 shared vCPU
+# Runs both FastAPI and Celery worker via backend/start.sh.
+#
+# Note: Render Free Web Services spin down after 15 minutes of inactivity and
+# incur a cold start (~50s) on the next incoming request. FAISS automatically
+# self-heals from Supabase PostgreSQL in <2 seconds on boot.
+#
+# SKIP_TORCH=true: PyTorch and sentence-transformers are NOT installed in the
+# Docker image. EMBEDDING_PROVIDER=huggingface uses the HF Router API instead,
+# saving ~2 GB image size and ~600 MB runtime memory — essential for the 512 MB
+# Render Free tier.
+# =============================================================================
+
+services:
+  - type: web
+    name: intelliflow-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerBuildArgs:
+      SKIP_TORCH: "true"
+    plan: free
+    region: frankfurt
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: EMBEDDING_PROVIDER
+        value: huggingface
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: SUPABASE_STORAGE_BUCKET
+        value: documents
+      - key: COOKIE_SECURE
+        value: true
+      - key: COOKIE_SAMESITE
+        value: lax
+      - key: FAISS_AUTO_WARMUP
+        value: true
+      - key: FAISS_AUTO_REBUILD_ON_EMPTY
+        value: true
+      # The following sensitive secrets must be entered in the Render Dashboard
+      # under Environment → Secret Files or Environment Variables.
+      # DO NOT add actual secret values here — this file is committed to Git.
+      - key: HF_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SYNC_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      # Celery uses REDIS_URL for broker and result backend.
+      # Set these to the same Upstash rediss:// URL as REDIS_URL.
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: INTEGRATION_ENCRYPTION_KEY
+        sync: false
+      - key: WEBHOOK_SIGNING_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # Set to your Vercel frontend URL, e.g. https://intelliflow.vercel.app
+      - key: CORS_ORIGINS
+        sync: false

@@ -55,7 +55,8 @@ services:
       --port 8000
       --workers 4
       --no-access-log
-    volumes: !reset []            # ← removes source bind mount
+    volumes: !reset
+      - faiss_data:/app/data/faiss
     environment:
       - APP_ENV=${APP_ENV:-production}
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
@@ -79,7 +80,8 @@ services:
       celery -A app.workers.celery_app worker
       --loglevel=info
       --concurrency=2
-    volumes: !reset []            # ← removes source bind mount
+    volumes: !reset
+      - faiss_data:/app/data/faiss
     environment:
       - APP_ENV=${APP_ENV:-production}
     healthcheck:
@@ -120,3 +122,8 @@ services:
     ports: !reset []              # ← removes host port exposure in production
     networks:
       - intelliflow_network
+
+volumes:
+  faiss_data:
+    driver: local
+

@@ -69,7 +69,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -477,18 +477,22 @@ async def download_document(
     request: Request,
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
-) -> FileResponse:
+) -> StreamingResponse:
     """Stream the active document file binary."""
-    file_path, file_name, content_type, file_size = await svc.get_document_file_path(
+    stream, file_name, content_type, file_size = await svc.get_document_stream(
         document_id=document_id,
         actor=current_user,
         ip_address=_get_client_ip(request),
     )
-    return FileResponse(
-        path=file_path,
-        filename=file_name,
+    headers: dict[str, str] = {
+        "Content-Disposition": f'attachment; filename="{file_name}"',
+    }
+    if file_size > 0:
+        headers["Content-Length"] = str(file_size)
+    return StreamingResponse(
+        stream,
         media_type=content_type,
-        headers={"Content-Length": str(file_size)},
+        headers=headers,
     )
 
 
@@ -502,21 +506,22 @@ async def preview_document(
     request: Request,
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
-) -> FileResponse:
+) -> StreamingResponse:
     """Stream document binary inline for in-browser rendering."""
-    file_path, file_name, content_type, file_size = await svc.get_document_preview_path(
+    stream, file_name, content_type, file_size = await svc.get_document_preview_stream(
         document_id=document_id,
         actor=current_user,
         ip_address=_get_client_ip(request),
     )
-    return FileResponse(
-        path=file_path,
-        filename=file_name,
+    headers: dict[str, str] = {
+        "Content-Disposition": f'inline; filename="{file_name}"',
+    }
+    if file_size > 0:
+        headers["Content-Length"] = str(file_size)
+    return StreamingResponse(
+        stream,
         media_type=content_type,
-        headers={
-            "Content-Length": str(file_size),
-            "Content-Disposition": f"inline; filename={file_name}",
-        },
+        headers=headers,
     )
 
 
@@ -739,18 +744,22 @@ async def download_document_version(
     version_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     svc: DocumentService = Depends(_get_service),
-) -> FileResponse:
+) -> StreamingResponse:
     """Stream download a specific version file binary."""
-    file_path, file_name, content_type, file_size = await svc.get_version_file_path(
+    stream, file_name, content_type, file_size = await svc.get_version_stream(
         document_id=document_id,
         version_id=version_id,
         actor=current_user,
     )
-    return FileResponse(
-        path=file_path,
-        filename=file_name,
+    headers: dict[str, str] = {
+        "Content-Disposition": f'attachment; filename="{file_name}"',
+    }
+    if file_size > 0:
+        headers["Content-Length"] = str(file_size)
+    return StreamingResponse(
+        stream,
         media_type=content_type,
-        headers={"Content-Length": str(file_size)},
+        headers=headers,
     )
 
 

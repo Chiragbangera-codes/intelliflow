@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import math
 import uuid
+from collections.abc import AsyncIterable
 from datetime import datetime
 from pathlib import Path
 
@@ -435,6 +436,32 @@ class DocumentService:
             logger.warning("Failed to auto-dispatch OCR task: %s", task_exc)
 
         return DocumentVersionResponse.model_validate(new_version)
+
+    async def get_version_stream(
+        self,
+        document_id: uuid.UUID,
+        version_id: uuid.UUID,
+        *,
+        actor: User,
+    ) -> tuple[AsyncIterable[bytes], str, str, int]:
+        """Verify download authorization and return version download stream."""
+        doc = await self._documents.get_by_id(document_id)
+        if not doc or doc.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+        active_share = await self._shares.get_active_share(doc.id, actor.id)
+        if not DocumentAccessService.can_download(doc, actor, active_share):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to download this document.",
+            )
+
+        ver = await self._versions.get_by_id(version_id)
+        if not ver or ver.document_id != document_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found.")
+
+        stream, size, ctype = await self._storage.open_stream(ver.storage_path, ver.file_size, ver.file_type)
+        return stream, ver.file_name, ctype, size
 
     async def get_version_file_path(
         self,
@@ -1484,6 +1511,72 @@ class DocumentService:
     # =========================================================================
     # 8. Streaming Downloads & In-Browser Preview
     # =========================================================================
+
+    async def get_document_stream(
+        self,
+        document_id: uuid.UUID,
+        *,
+        actor: User,
+        ip_address: str | None = None,
+    ) -> tuple[AsyncIterable[bytes], str, str, int]:
+        """Verify download authorization and return active document download stream."""
+        doc = await self._documents.get_by_id(document_id)
+        if doc is None or doc.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+        active_share = await self._shares.get_active_share(doc.id, actor.id)
+        if not DocumentAccessService.can_download(doc, actor, active_share):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to download this document.",
+            )
+
+        stream, size, ctype = await self._storage.open_stream(doc.storage_path, doc.file_size, doc.file_type)
+
+        await self._audit.create(
+            action="document.download",
+            user_id=actor.id,
+            table_name="documents",
+            record_id=doc.id,
+            new_value={"file_name": doc.file_name, "file_size": size},
+            ip_address=ip_address,
+        )
+        await self._session.commit()
+
+        return stream, doc.file_name, ctype, size
+
+    async def get_document_preview_stream(
+        self,
+        document_id: uuid.UUID,
+        *,
+        actor: User,
+        ip_address: str | None = None,
+    ) -> tuple[AsyncIterable[bytes], str, str, int]:
+        """Verify view authorization and return active document preview stream."""
+        doc = await self._documents.get_by_id(document_id)
+        if doc is None or doc.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+        active_share = await self._shares.get_active_share(doc.id, actor.id)
+        if not DocumentAccessService.can_view(doc, actor, active_share):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to preview this document.",
+            )
+
+        stream, size, ctype = await self._storage.open_stream(doc.storage_path, doc.file_size, doc.file_type)
+
+        await self._audit.create(
+            action="document.view",
+            user_id=actor.id,
+            table_name="documents",
+            record_id=doc.id,
+            new_value={"file_name": doc.file_name},
+            ip_address=ip_address,
+        )
+        await self._session.commit()
+
+        return stream, doc.file_name, ctype, size
 
     async def get_document_file_path(
         self,

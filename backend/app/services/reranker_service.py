@@ -36,25 +36,25 @@ from __future__ import annotations
 
 import logging
 import threading
-
-try:
-    from sentence_transformers import CrossEncoder
-except ImportError:
-    CrossEncoder = None  # type: ignore[assignment, misc]
+from typing import Any
 
 from app.core.config import settings
 from app.schemas.search import SearchResult
 
 logger = logging.getLogger(__name__)
 
+# Defined at module level as None so tests can patch app.services.reranker_service.CrossEncoder
+# without importing torch at module import time.
+CrossEncoder: Any = None
+
 # ---------------------------------------------------------------------------
 # Module-level lazy initialization (mirrors embedding_service)
 # ---------------------------------------------------------------------------
 _model_lock = threading.Lock()
-_model_instance: CrossEncoder | None = None
+_model_instance: Any = None
 
 
-def _get_reranker() -> CrossEncoder:
+def _get_reranker() -> Any:
     """
     Return the singleton CrossEncoder, loading it on first call.
 
@@ -62,7 +62,7 @@ def _get_reranker() -> CrossEncoder:
     model loader. Forced onto CPU (no CUDA) and bounded to a sane max sequence
     length so a pathologically long chunk cannot blow up tokenisation cost.
     """
-    global _model_instance  # noqa: PLW0603
+    global _model_instance, CrossEncoder  # noqa: PLW0603
     if _model_instance is None:
         with _model_lock:
             if _model_instance is None:
@@ -70,6 +70,11 @@ def _get_reranker() -> CrossEncoder:
                     "Loading reranker model '%s' (first call — this may take a moment).",
                     settings.AI_RERANK_MODEL,
                 )
+                if CrossEncoder is None:
+                    from sentence_transformers import CrossEncoder as _CE
+
+                    CrossEncoder = _CE
+
                 _model_instance = CrossEncoder(
                     settings.AI_RERANK_MODEL,
                     max_length=512,

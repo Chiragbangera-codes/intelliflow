@@ -16,6 +16,7 @@ Worker warm-up:
 from __future__ import annotations
 
 import logging
+import ssl
 
 from celery import Celery
 from celery.signals import worker_process_init, worker_ready
@@ -27,6 +28,9 @@ from app.services.vector_store_service import ChunkVector, vector_store
 from app.workers.task_runner import run_in_worker
 
 logger = logging.getLogger(__name__)
+
+_is_broker_tls = settings.CELERY_BROKER_URL.startswith("rediss://")
+_is_backend_tls = settings.CELERY_RESULT_BACKEND.startswith("rediss://")
 
 celery_app = Celery(
     "intelliflow",
@@ -60,6 +64,14 @@ celery_app.conf.update(
     task_soft_time_limit=300,  # 5 min soft timeout
     task_time_limit=360,  # 6 min hard timeout
     worker_max_tasks_per_child=100,  # Prevent memory leaks from PyTorch/FAISS
+    # Cloud Redis resilience (Upstash TLS / reconnect)
+    broker_connection_retry_on_startup=True,
+    broker_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED} if _is_broker_tls else None,
+    redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED} if _is_backend_tls else None,
+    broker_transport_options={
+        "visibility_timeout": 3600,
+        "max_connections": 10,
+    },
 )
 
 
@@ -103,8 +115,8 @@ async def _warm_up_faiss() -> None:
     Async warm-up: load the FAISS index from disk or rebuild from PostgreSQL.
 
     Strategy:
-      1. If index.faiss exists on disk → load it (fast path).
-      2. If index is missing or stale → rebuild from AIEmbedding rows in DB.
+      1. If index.faiss exists on disk and has vectors → load it (fast path).
+      2. If index is missing or empty → rebuild from AIEmbedding rows in DB.
       3. Log the final vector count and index path.
     """
     from pathlib import Path
@@ -114,14 +126,15 @@ async def _warm_up_faiss() -> None:
     if index_path.exists():
         logger.info("FAISS warm-up: loading existing index from '%s'.", index_path)
         vector_store.load()
-        logger.info(
-            "FAISS warm-up: index loaded. Vectors: %d. Path: %s.",
-            vector_store.vector_count,
-            index_path,
-        )
-        return
+        if vector_store.vector_count > 0:
+            logger.info(
+                "FAISS warm-up: index loaded. Vectors: %d. Path: %s.",
+                vector_store.vector_count,
+                index_path,
+            )
+            return
 
-    # Index file missing — rebuild from DB embeddings
+    # Index file missing or empty — rebuild from DB embeddings
     logger.info(
         "FAISS warm-up: index file not found at '%s'. "
         "Rebuilding from AIEmbedding records in PostgreSQL.",
@@ -141,7 +154,7 @@ async def _warm_up_faiss() -> None:
         return
 
     logger.info(
-        "FAISS warm-up: found %d embedding records. " "Re-embedding chunks to rebuild index.",
+        "FAISS warm-up: found %d embedding records. Re-embedding chunks to rebuild index.",
         len(all_embeddings),
     )
 

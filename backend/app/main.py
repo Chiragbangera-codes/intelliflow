@@ -83,6 +83,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("FATAL CONFIGURATION ERROR: %s", exc)
         raise
 
+    # 2. Warm up FAISS vector store (self-healing for cloud ephemeral environments)
+    try:
+        from app.services.vector_store_service import warm_up_vector_store
+
+        await warm_up_vector_store()
+    except Exception as exc:
+        logger.warning("FAISS vector store startup warm-up warning (non-fatal): %s", exc)
+
     yield
 
     # 2. Cleanup resources on shutdown
