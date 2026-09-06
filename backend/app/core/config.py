@@ -132,7 +132,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Provider options: "local" (in-container SentenceTransformer), "huggingface" (cloud router API)
     EMBEDDING_PROVIDER: str = "local"
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     HF_TOKEN: str | None = None
     HF_ROUTER_BASE_URL: str = "https://router.huggingface.co/hf-inference/models"
     HF_TIMEOUT_SECONDS: int = 60

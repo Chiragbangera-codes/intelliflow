@@ -37,6 +37,8 @@ services:
         value: llama-3.3-70b-versatile
       - key: EMBEDDING_PROVIDER
         value: huggingface
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
       - key: STORAGE_BACKEND
         value: supabase
       - key: SUPABASE_STORAGE_BUCKET
