@@ -87,6 +87,10 @@ FROM base AS production
 RUN groupadd --gid 1001 appgroup \
     && useradd --uid 1001 --gid appgroup --create-home appuser
 
+# Pre-create data and storage directories with write permissions for appuser
+RUN mkdir -p /app/data/faiss /app/storage/documents \
+    && chown -R appuser:appgroup /app/data /app/storage
+
 COPY --chown=appuser:appgroup . .
 RUN chmod +x /app/start.sh
 

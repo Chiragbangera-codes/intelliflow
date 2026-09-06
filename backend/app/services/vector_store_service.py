@@ -101,7 +101,14 @@ class VectorStoreService:
 
     @property
     def _index_path(self) -> Path:
-        return Path(settings.FAISS_INDEX_PATH)
+        target = Path(settings.FAISS_INDEX_PATH)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            return target
+        except OSError:
+            fallback = Path("/tmp/faiss")
+            fallback.mkdir(parents=True, exist_ok=True)
+            return fallback / target.name
 
     @property
     def _mapping_path(self) -> Path:
@@ -109,7 +116,10 @@ class VectorStoreService:
 
     def _ensure_dir(self) -> None:
         """Create the parent directory for the index if it does not exist."""
-        self._index_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._index_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
 
     def _disk_mtime(self) -> float | None:
         """Return the on-disk index file mtime, or None if it does not exist."""

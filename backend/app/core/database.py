@@ -19,6 +19,7 @@ Usage:
 """
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -29,9 +30,20 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Engine
-# ---------------------------------------------------------------------------
+# Configure connection arguments for asyncpg.
+# Supabase transaction pooler (PgBouncer) does not support prepared statement caching.
+# Disabling statement_cache_size prevents DuplicatePreparedStatementError.
+connect_args: dict[str, Any] = {}
+db_url_str = str(settings.DATABASE_URL)
+if (
+    "pooler" in db_url_str
+    or "pgbouncer" in db_url_str
+    or "supabase" in db_url_str
+    or "prepared_statement_cache_size=0" in db_url_str
+):
+    connect_args["statement_cache_size"] = 0
+    connect_args["prepared_statement_cache_size"] = 0
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     # Echo SQL statements in development for debugging; disabled in production
@@ -40,6 +52,7 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,  # Detect stale connections before use
+    connect_args=connect_args,
 )
 
 # ---------------------------------------------------------------------------
