@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better layer caching
-COPY requirements.txt .
+COPY requirements.txt requirements-cloud.txt ./
 
 # Build arg: set SKIP_TORCH=true to skip heavy ML libraries (cloud deployments).
 ARG SKIP_TORCH=true
@@ -54,9 +54,8 @@ ARG SKIP_TORCH=true
 #     multi-GB CUDA variant via sentence-transformers.
 RUN pip install --no-cache-dir --upgrade pip && \
     if [ "$SKIP_TORCH" = "true" ]; then \
-        echo "==> SKIP_TORCH=true: skipping PyTorch and sentence-transformers." && \
-        pip install --no-cache-dir \
-            $(grep -v -E '^(sentence-transformers|torch|torchvision)' requirements.txt | tr '\n' ' '); \
+        echo "==> SKIP_TORCH=true: installing cloud requirements (no PyTorch)." && \
+        pip install --no-cache-dir -r requirements-cloud.txt; \
     else \
         echo "==> SKIP_TORCH=false: installing PyTorch (CPU) and sentence-transformers." && \
         pip install --no-cache-dir \
