@@ -20,10 +20,11 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerBuildArgs:
-      SKIP_TORCH: "true"
+    dockerArgs:
+      - name: SKIP_TORCH
+        value: "true"
     plan: free
-    region: frankfurt
+    region: singapore
     branch: main
     healthCheckPath: /health
     envVars:
