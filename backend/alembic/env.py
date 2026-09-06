@@ -58,7 +58,7 @@ from app.models.workflow_step import WorkflowStep  # noqa: F401
 config = context.config
 
 # Override the database URL from Settings so credentials are never in alembic.ini
-config.set_main_option("sqlalchemy.url", settings.DATABASE_SYNC_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_SYNC_URL.replace("%", "%%"))
 
 # Setup loggers defined in alembic.ini
 if config.config_file_name is not None:
