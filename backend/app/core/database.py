@@ -20,6 +20,7 @@ Usage:
 
 from datetime import datetime
 from typing import Any
+import uuid
 
 from sqlalchemy import DateTime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -32,7 +33,7 @@ logger = get_logger(__name__)
 
 # Configure connection arguments for asyncpg.
 # Supabase transaction pooler (PgBouncer) does not support prepared statement caching.
-# Disabling statement_cache_size prevents DuplicatePreparedStatementError.
+# Disabling statement caching and using unique statement names prevents DuplicatePreparedStatementError.
 connect_args: dict[str, Any] = {}
 db_url_str = str(settings.DATABASE_URL)
 if (
@@ -43,6 +44,7 @@ if (
 ):
     connect_args["statement_cache_size"] = 0
     connect_args["prepared_statement_cache_size"] = 0
+    connect_args["prepared_statement_name_func"] = lambda: f"__stmt_{uuid.uuid4().hex}__"
 
 engine = create_async_engine(
     settings.DATABASE_URL,
