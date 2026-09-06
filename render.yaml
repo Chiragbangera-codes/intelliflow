@@ -20,9 +20,6 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerArgs:
-      - name: SKIP_TORCH
-        value: "true"
     plan: free
     region: singapore
     branch: main
