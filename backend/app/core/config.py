@@ -123,7 +123,7 @@ class Settings(BaseSettings):
     # Hosted Groq Cloud API settings (used when LLM_PROVIDER="groq")
     # Configurable via environment variables (e.g. llama-3.3-70b-versatile, llama-3.1-8b-instant)
     GROQ_API_KEY: str | None = None
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_TIMEOUT_SECONDS: int = 60
 
