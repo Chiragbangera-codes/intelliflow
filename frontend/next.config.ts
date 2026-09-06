@@ -8,7 +8,8 @@ import type { NextConfig } from "next";
  * - Public env vars prefixed NEXT_PUBLIC_ are baked into the client bundle at build time.
  */
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Use standalone only for Docker builds, not on Vercel
+  output: process.env.VERCEL ? undefined : "standalone",
   reactStrictMode: true,
 
   // Expose backend API URL to client-side code
