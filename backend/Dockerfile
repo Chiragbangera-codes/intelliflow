@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 
 # Build arg: set SKIP_TORCH=true to skip heavy ML libraries (cloud deployments).
-ARG SKIP_TORCH=false
+ARG SKIP_TORCH=true
 
 # Install Python dependencies.
 # When SKIP_TORCH=true (cloud / HuggingFace embeddings):
