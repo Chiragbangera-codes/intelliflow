@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -144,7 +144,7 @@ class Document(Base):
         SAEnum(
             DocumentConfidentiality,
             name="document_confidentiality",
-            values_callable=lambda obj: [e.value for e in obj],
+            values_callable=lambda obj: [e.value for e in obj],  # type: ignore[misc]
         ),
         nullable=False,
         default=DocumentConfidentiality.INTERNAL,
@@ -156,7 +156,7 @@ class Document(Base):
         SAEnum(
             DocumentLifecycleStatus,
             name="document_lifecycle_status",
-            values_callable=lambda obj: [e.value for e in obj],
+            values_callable=lambda obj: [e.value for e in obj],  # type: ignore[misc]
         ),
         nullable=False,
         default=DocumentLifecycleStatus.ACTIVE,
@@ -168,14 +168,14 @@ class Document(Base):
         SAEnum(
             DocumentStatus,
             name="document_status",
-            values_callable=lambda obj: [e.value for e in obj],
+            values_callable=lambda obj: [e.value for e in obj],  # type: ignore[misc]
         ),
         nullable=False,
         default=DocumentStatus.PENDING,
         server_default="pending",
     )
     ocr_status: Mapped[OcrStatus] = mapped_column(
-        SAEnum(OcrStatus, name="ocr_status", values_callable=lambda obj: [e.value for e in obj]),
+        SAEnum(OcrStatus, name="ocr_status", values_callable=lambda obj: [e.value for e in obj]),  # type: ignore[misc]
         nullable=False,
         default=OcrStatus.PENDING,
         server_default="pending",
@@ -213,6 +213,7 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(UTC),
         server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(
@@ -247,7 +248,7 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="DocumentVersion.version_number.desc()",
+        order_by=text("version_number DESC"),
         doc="Revision history for this document.",
     )
     shares: Mapped[list[DocumentShare]] = relationship(
