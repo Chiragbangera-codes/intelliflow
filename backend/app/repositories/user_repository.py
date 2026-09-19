@@ -43,7 +43,7 @@ class UserRepository:
                 selectinload(User.employee_profile),
             )
             .where(
-                User.email == email,
+                User.email == email.lower().strip(),
                 User.deleted_at.is_(None),
             )
         )

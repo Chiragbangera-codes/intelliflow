@@ -64,7 +64,7 @@ def upgrade() -> None:
             ON CONFLICT (email) DO NOTHING
         """).bindparams(
             id=str(_ADMIN_USER_ID),
-            email="Admin@intelliflow.ai",
+            email="admin@intelliflow.ai",
             first_name="System",
             last_name="Administrator",
             password_hash=_ADMIN_PASSWORD_HASH,

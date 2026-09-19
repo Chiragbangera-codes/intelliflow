@@ -106,7 +106,7 @@ class AuthService:
         password_hash = hash_password(data.password)
 
         user = await self._users.create(
-            email=data.email,
+            email=data.email.lower().strip(),
             password_hash=password_hash,
             first_name=data.first_name,
             last_name=data.last_name,
@@ -163,7 +163,7 @@ class AuthService:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-        user = await self._users.get_by_email(data.email)
+        user = await self._users.get_by_email(data.email.lower().strip())
         if user is None:
             # Perform a dummy verify to prevent timing attacks
             verify_password("dummy", "$argon2id$v=19$m=65536,t=2,p=2$dummy")
