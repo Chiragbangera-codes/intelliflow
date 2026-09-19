@@ -55,21 +55,21 @@ def upgrade() -> None:
     op.execute(
         sa.text("""
             INSERT INTO users (
-                id, email, full_name, password_hash,
-                role_id, status, is_active, created_at, updated_at
+                id, email, first_name, last_name, password_hash,
+                role_id, status, created_at, updated_at
             ) VALUES (
-                :id, :email, :full_name, :password_hash,
-                :role_id, :status, :is_active, :created_at, :updated_at
+                :id, :email, :first_name, :last_name, :password_hash,
+                :role_id, :status, :created_at, :updated_at
             )
             ON CONFLICT (email) DO NOTHING
         """).bindparams(
             id=str(_ADMIN_USER_ID),
             email="Admin@intelliflow.ai",
-            full_name="System Administrator",
+            first_name="System",
+            last_name="Administrator",
             password_hash=_ADMIN_PASSWORD_HASH,
             role_id=str(_ROLE_ADMIN),
             status="active",
-            is_active=True,
             created_at=now,
             updated_at=now,
         )
