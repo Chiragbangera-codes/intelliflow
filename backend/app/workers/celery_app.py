@@ -23,6 +23,7 @@ from celery.signals import worker_process_init, worker_ready
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, engine
+import app.models  # noqa: F401 — ensure all ORM models are registered before warm-up
 from app.repositories.ai_embedding_repository import AIEmbeddingRepository
 from app.services.vector_store_service import ChunkVector, vector_store
 from app.workers.task_runner import run_in_worker
