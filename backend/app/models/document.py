@@ -14,7 +14,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, asc, desc, func
+from sqlalchemy import column as sa_column
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -240,7 +241,7 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         lazy="raise",
-        order_by=lambda: DocumentChunk.chunk_number,
+        order_by=asc(sa_column("chunk_number")),
         doc="Text chunks derived from this document.",
     )
     versions: Mapped[list[DocumentVersion]] = relationship(
@@ -248,7 +249,7 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by=lambda: DocumentVersion.version_number.desc(),
+        order_by=desc(sa_column("version_number")),
         doc="Revision history for this document.",
     )
     shares: Mapped[list[DocumentShare]] = relationship(

@@ -14,7 +14,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, asc, func
+from sqlalchemy import column as sa_column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -92,7 +93,7 @@ class Workflow(Base):
         back_populates="workflow",
         cascade="all, delete-orphan",
         lazy="raise",
-        order_by=lambda: WorkflowStep.step_number,
+        order_by=asc(sa_column("step_number")),
         doc="Ordered steps of the workflow. Load explicitly when needed.",
     )
     executions: Mapped[list[WorkflowExecution]] = relationship(
