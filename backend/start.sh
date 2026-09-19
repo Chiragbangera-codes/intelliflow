@@ -16,6 +16,11 @@ set -e
 PORT="${PORT:-8000}"
 echo "==> [start.sh] Starting IntelliFlow AI in production on port ${PORT}..."
 
+# 0. Run database migrations
+echo "==> [start.sh] Running database migrations..."
+alembic upgrade head
+echo "==> [start.sh] Migrations complete."
+
 # 1. Start Celery worker in background (concurrency: 1 to fit in 512 MB)
 echo "==> [start.sh] Launching Celery background worker (concurrency: 1)..."
 celery -A app.workers.celery_app worker \
