@@ -92,7 +92,7 @@ class Workflow(Base):
         back_populates="workflow",
         cascade="all, delete-orphan",
         lazy="raise",
-        order_by="WorkflowStep.step_number",
+        order_by=lambda: WorkflowStep.step_number,
         doc="Ordered steps of the workflow. Load explicitly when needed.",
     )
     executions: Mapped[list[WorkflowExecution]] = relationship(
